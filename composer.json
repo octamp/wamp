@@ -1,0 +1,25 @@
+{
+    "name": "octamp/wamp",
+    "description": "WAMP Router",
+    "type": "project",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Octamp\\Wamp\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Cydrick Nonog",
+            "email": "cydrick.dev@gmail.com"
+        }
+    ],
+    "require": {
+        "octamp/server": "^1.0",
+        "voryx/thruway": "^0.4.2",
+        "symfony/event-dispatcher": "^2.8"
+    },
+    "require-dev": {
+        "openswoole/ide-helper": "^22.1"
+    }
+}
