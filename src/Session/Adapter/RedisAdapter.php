@@ -27,6 +27,7 @@ class RedisAdapter implements AdapterInterface
             'realm' => $session->getRealm()?->name ?? null,
             'trusted' => $session->isTrusted(),
             'transportClass' => get_class($session->getTransport()),
+            'serializerClass' => get_class($session->getTransport()->getSerializer()),
             'serverId' => $session->getServerId(),
         ];
 

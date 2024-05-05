@@ -1,8 +1,10 @@
 <?php
+declare(strict_types=1);
 
 namespace Octamp\Wamp;
 
 use Octamp\Server\Connection\Connection;
+use Octamp\Server\Generator\RedisIDGenerator;
 use Octamp\Server\Server;
 use Octamp\Wamp\Adapter\AdapterInterface;
 use Octamp\Wamp\Adapter\RedisAdapter;
@@ -44,6 +46,11 @@ class Wamp
         $transportProvider->setAdapter($this->adapter);
         $this->transportProviders[] = $transportProvider;
 
+        $transportProvider->getServer()->on('beforeStart', function (Server $server) {
+            $idGenerator = new RedisIDGenerator($server, $this->adapter);
+            $server->setGenerator($idGenerator);
+        });
+
 
         $transportProvider->getServer()->on('afterStart', function (Server $server) {
             $sessionAdapter = new \Octamp\Wamp\Session\Adapter\RedisAdapter($this->adapter);
@@ -51,8 +58,8 @@ class Wamp
             $this->realmManager->init($sessionStorage, $this->adapter);
 
             $router = new Router();
-            $router->addRole(new Broker($this->adapter));
-            $router->addRole(new Dealer($this->adapter));
+            $router->addRole(new Broker($this->adapter, $sessionStorage));
+            $router->addRole(new Dealer($this->adapter, $sessionStorage));
 
             $router->addTransportProviders($this->transportProviders);
 
@@ -115,7 +122,9 @@ class Wamp
                 return;
             }
 
-            if ($frame->opcode === \OpenSwoole\WebSocket\Server::WEBSOCKET_OPCODE_TEXT) {
+            if ($frame->opcode === \OpenSwoole\WebSocket\Server::WEBSOCKET_OPCODE_PONG) {
+                $session->getTransport()->onPong($frame);
+            } elseif ($frame->opcode === \OpenSwoole\WebSocket\Server::WEBSOCKET_OPCODE_TEXT) {
                 $message = $session->getTransport()->getSerializer()->deserialize($frame->data);
                 $this->realmManager->dispatch($session, $message);
             }

@@ -2,6 +2,7 @@
 
 namespace Octamp\Wamp\Peers;
 
+use Octamp\Wamp\Event\EventInterface;
 use Octamp\Wamp\Roles\RoleInterface;
 use Octamp\Wamp\Session\Session;
 use Octamp\Wamp\Transport\TransportProviderInterface;
@@ -50,7 +51,7 @@ class Router
         }
     }
 
-    public function handle(Session $session, Message $message): void
+    public function handle(Session $session, Message|EventInterface $message): void
     {
         $eventName = (new \ReflectionClass($message))->getShortName();
         $handlerName = 'on' . $eventName;

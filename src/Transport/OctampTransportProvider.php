@@ -22,7 +22,7 @@ class OctampTransportProvider implements TransportProviderInterface
     public function __construct()
     {
         $this->websocketServer = Server::createWebsocketServer('0.0.0.0', 8080, [
-            'worker_num' => 1,
+            'worker_num' => 3,
             'websocket_subprotocol' => 'wamp.2.json',
             'open_websocket_close_frame' => true,
             'open_websocket_ping_frame' => true,

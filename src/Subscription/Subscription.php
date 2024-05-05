@@ -25,11 +25,6 @@ class Subscription
 
     private bool $disclosePublisher;
 
-    /**
-     * @var SubscriptionGroup
-     */
-    private $subscriptionGroup;
-
     public function __construct(string $uri, Session $session, array|object|null $options = null)
     {
 
@@ -54,6 +49,11 @@ class Subscription
         }
 
         return $subscription;
+    }
+
+    public function setId(float|int $id): void
+    {
+        $this->id = $id;
     }
 
     public function getId(): string
@@ -87,21 +87,6 @@ class Subscription
         $this->session = $session;
     }
 
-    /**
-     * @return SubscriptionGroup
-     */
-    public function getSubscriptionGroup()
-    {
-        return $this->subscriptionGroup;
-    }
-
-    /**
-     * @param SubscriptionGroup $subscriptionGroup
-     */
-    public function setSubscriptionGroup(SubscriptionGroup $subscriptionGroup)
-    {
-        $this->subscriptionGroup = $subscriptionGroup;
-    }
 
     public function isDisclosePublisher(): bool
     {

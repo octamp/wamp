@@ -2,8 +2,11 @@
 
 namespace Octamp\Wamp\Session;
 
+use Octamp\Client\Promise\Promise;
+use Octamp\Wamp\Event\LeaveRealmEvent;
 use Octamp\Wamp\Realm\Realm;
 use Octamp\Wamp\Transport\AbstractTransport;
+use Thruway\Authentication\AuthenticationDetails;
 use Thruway\Message\AbortMessage;
 use Thruway\Message\HelloMessage;
 use Thruway\Message\Message;
@@ -23,6 +26,10 @@ class Session
 
     protected bool $goodByeSent = false;
 
+    protected int $pendingCallCount = 0;
+
+    protected ?AuthenticationDetails $authenticationDetails = null;
+
     public function __construct(protected AbstractTransport $transport, protected string $serverId)
     {
     }
@@ -39,6 +46,11 @@ class Session
     public function getId(): ?string
     {
         return $this->id;
+    }
+
+    public function getSessionId(): ?string
+    {
+        return $this->getId();
     }
 
     public function setTrusted(bool $trusted): void
@@ -104,9 +116,9 @@ class Session
         $this->getTransport()->sendMessage($message);
     }
 
-    public function ping(): void
+    public function ping(): Promise
     {
-        $this->getTransport()->getConnection()->ping();
+        return $this->getTransport()->ping();
     }
 
     public function isTrusted(): bool
@@ -133,32 +145,32 @@ class Session
     public function onClose(): void
     {
         if ($this->realm !== null) {
-            $this->realm->onLeaveRealm($this);
+            $this->realm->handle($this, new LeaveRealmEvent($this));
         }
     }
 
     public function getMetaInfo(): array
     {
         // TODO
-//        if ($this->getAuthenticationDetails() instanceof AuthenticationDetails) {
-//            $authId     = $this->getAuthenticationDetails()->getAuthId();
-//            $authMethod = $this->getAuthenticationDetails()->getAuthMethod();
-//            $authRole   = $this->getAuthenticationDetails()->getAuthRole();
-//            $authRoles  = $this->getAuthenticationDetails()->getAuthRoles();
-//        } else {
-//            $authId     = "anonymous";
-//            $authMethod = "anonymous";
-//            $authRole   = "anonymous";
-//            $authRoles  = [];
-//        }
+        if ($this->getAuthenticationDetails() instanceof AuthenticationDetails) {
+            $authId     = $this->getAuthenticationDetails()->getAuthId();
+            $authMethod = $this->getAuthenticationDetails()->getAuthMethod();
+            $authRole   = $this->getAuthenticationDetails()->getAuthRole();
+            $authRoles  = $this->getAuthenticationDetails()->getAuthRoles();
+        } else {
+            $authId     = "anonymous";
+            $authMethod = "anonymous";
+            $authRole   = "anonymous";
+            $authRoles  = [];
+        }
 
         return [
             "realm"         => $this->getRealm()->name,
             "authprovider"  => null,
-            "authid"        => null,
-            "authrole"      => null,
-            "authroles"     => null,
-            "authmethod"    => null,
+            "authid"        => $authId,
+            "authrole"      => $authRoles,
+            "authroles"     => $authRole,
+            "authmethod"    => $authMethod,
             "session"       => $this->getId(),
             "role_features" => $this->getRoleFeatures()
         ];
@@ -168,5 +180,30 @@ class Session
     {
         // TODO
         return [];
+    }
+
+    public function incPendingCallCount(): int
+    {
+        return $this->pendingCallCount++;
+    }
+
+    public function decPendingCallCount(): int
+    {
+        // if we are already at zero - something is wrong
+        if ($this->pendingCallCount === 0) {
+            return 0;
+        }
+
+        return $this->pendingCallCount--;
+    }
+
+    public function setAuthenticationDetails(AuthenticationDetails $authenticationDetails): void
+    {
+        $this->authenticationDetails = $authenticationDetails;
+    }
+
+    public function getAuthenticationDetails(): AuthenticationDetails
+    {
+        return $this->authenticationDetails;
     }
 }

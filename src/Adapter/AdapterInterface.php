@@ -12,6 +12,8 @@ interface AdapterInterface
 
     public function set(string $key, array $data = []): void;
 
+    public function setField(string $key, string $field, mixed $data): void;
+
     public function del(string $key, array $fields = []): void;
 
     public function get(string $key, array $fields = []): ?array;
@@ -25,4 +27,6 @@ interface AdapterInterface
     public function getList(string $key): array;
 
     public function inc(string $key, int $increment = 1, ?string $field = null): int;
+
+    public function countFields(string $key): int;
 }

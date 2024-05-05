@@ -34,4 +34,18 @@ class RedisAdapter extends \Octamp\Server\Adapter\RedisAdapter implements Adapte
 
         return $value;
     }
+
+    public function setField(string $key, string $field, mixed $data): void
+    {
+        $this->set($key, [$field => $data]);
+    }
+
+    public function countFields(string $key): int
+    {
+        $client = $this->createPredis();
+        $count = $client->hlen($key);
+        $client->quit();
+
+        return $count;
+    }
 }
