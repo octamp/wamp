@@ -29,4 +29,10 @@ interface AdapterInterface
     public function inc(string $key, int $increment = 1, ?string $field = null): int;
 
     public function countFields(string $key): int;
+
+    public function lock(string $key, int|string $value, int $seconds = 1): bool;
+
+    public function unlock(string $key, int|string $value): bool;
+
+    public function exists(string $key): bool;
 }

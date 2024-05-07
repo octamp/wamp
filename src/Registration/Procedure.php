@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Octamp\Wamp\Registration;
 
+use Octamp\Wamp\Adapter\AdapterInterface;
 use Octamp\Wamp\Session\Session;
 use Thruway\Message\ErrorMessage;
 use Thruway\Message\RegisteredMessage;
@@ -32,7 +33,7 @@ class Procedure
      *
      * @param string $procedureName
      */
-    public function __construct(string $procedureName)
+    public function __construct(protected AdapterInterface $adapter, string $procedureName, protected bool $processSets = true)
     {
         $this->setProcedureName($procedureName);
 
@@ -52,9 +53,11 @@ class Procedure
      * @return bool
      * @throws \Exception
      */
-    public function processRegister(Session $session, RegisterMessage $msg): bool
+    public function processRegister(Session $session, RegisterMessage $msg, ?Registration $registration = null): bool
     {
-        $registration = Registration::createRegistrationFromRegisterMessage($session, $msg);
+        if ($registration === null) {
+            $registration = Registration::createRegistrationFromRegisterMessage($session, $msg);
+        }
 
         if (count($this->registrations) > 0) {
             // we already have something registered
@@ -95,11 +98,12 @@ class Procedure
                 }
             }
         } else {
-            // this is the first registration
-            // setup the procedure to match the options
-            $this->setDiscloseCaller($registration->getDiscloseCaller());
-            $this->setAllowMultipleRegistrations($registration->getAllowMultipleRegistrations());
-            $this->setInvokeType($registration->getInvokeType());
+            if ($this->processSets) {
+                // setup the procedure to match the options
+                $this->setDiscloseCaller($registration->getDiscloseCaller());
+                $this->setAllowMultipleRegistrations($registration->getAllowMultipleRegistrations());
+                $this->setInvokeType($registration->getInvokeType());
+            }
 
             return $this->addRegistration($registration, $msg);
         }

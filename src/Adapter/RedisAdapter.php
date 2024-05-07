@@ -2,6 +2,9 @@
 
 namespace Octamp\Wamp\Adapter;
 
+use OpenSwoole\Coroutine;
+use OpenSwoole\Timer;
+
 class RedisAdapter extends \Octamp\Server\Adapter\RedisAdapter implements AdapterInterface
 {
     public function addToList(string $key, mixed $value): bool
@@ -47,5 +50,52 @@ class RedisAdapter extends \Octamp\Server\Adapter\RedisAdapter implements Adapte
         $client->quit();
 
         return $count;
+    }
+
+    public function lock(string $key, int|string $value, int $seconds = 1, int $exp = 2): bool
+    {
+        $chan = new Coroutine\Channel(1);
+        $this->lockCallback($chan, $key, $value, $seconds);
+        $status = $chan->pop($exp);
+        if ($chan->errCode === Coroutine\Channel::CHANNEL_TIMEOUT) {
+            $status = false;
+        }
+        $chan->close();
+
+        return $status;
+    }
+
+    public function unlock(string $key, int|string $value): bool
+    {
+        $client = $this->createPredis();
+        $result = $client->get($key);
+        if ($result === $value) {
+            $client->del($key);
+        }
+        $client->quit();
+
+        return $result === $value;
+    }
+
+    protected function lockCallback(Coroutine\Channel $chan, string $key, int|string $value, int $seconds = 1): void
+    {
+        $client = $this->createPredis();
+        if ($client->setnx($key, $value) === 1) {
+            $chan->push(true);
+        }
+        $client->quit();
+
+        if ($chan->errCode === Coroutine\Channel::CHANNEL_OK) {
+            Timer::after(500, [$this, 'lockCallback'], $chan, $key, $value, $seconds);
+        }
+    }
+
+    public function exists(string $key): bool
+    {
+        $client = $this->createPredis();
+        $exists = $client->exists($key);
+        $client->quit();
+
+        return (bool) $exists;
     }
 }
