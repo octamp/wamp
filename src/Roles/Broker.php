@@ -31,7 +31,7 @@ class Broker extends AbstractRole implements RoleInterface
     protected bool $stopped = false;
     protected Channel $subscribeChan;
 
-    public function __construct(AdapterInterface $adapter, SessionStorage $sessionStorage)
+    public function __construct(AdapterInterface $adapter, SessionStorage $sessionStorage, protected string $serverId)
     {
         parent::__construct($adapter, $sessionStorage);
         $this->subscribeChan = new Channel(1);

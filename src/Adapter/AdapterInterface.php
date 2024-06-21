@@ -2,7 +2,7 @@
 
 namespace Octamp\Wamp\Adapter;
 
-interface AdapterInterface
+interface AdapterInterface extends \Octamp\Server\Adapter\AdapterInterface
 {
     public function start(string $serverId): void;
 
@@ -20,7 +20,11 @@ interface AdapterInterface
 
     public function find(string $search): array;
 
+    public function findWithRetainKey(string $search): array;
+
     public function keys(string $search): array;
+
+    public function hkeys(string $search): array;
 
     public function addToList(string $key, mixed $value): bool;
 

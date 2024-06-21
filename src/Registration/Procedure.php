@@ -5,11 +5,15 @@ namespace Octamp\Wamp\Registration;
 
 use Octamp\Wamp\Adapter\AdapterInterface;
 use Octamp\Wamp\Session\Session;
+use Octamp\Wamp\Session\SessionStorage;
+use OpenSwoole\Coroutine;
 use Thruway\Message\ErrorMessage;
+use Thruway\Message\Message;
 use Thruway\Message\RegisteredMessage;
 use Thruway\Message\RegisterMessage;
 use Thruway\Message\UnregisteredMessage;
 use Thruway\Message\UnregisterMessage;
+use function MongoDB\Driver\Monitoring\removeSubscriber;
 
 class Procedure
 {
@@ -33,7 +37,7 @@ class Procedure
      *
      * @param string $procedureName
      */
-    public function __construct(protected AdapterInterface $adapter, string $procedureName, protected bool $processSets = true)
+    public function __construct(protected AdapterInterface $adapter, protected SessionStorage $sessionStorage, string $procedureName, protected bool $processSets = true)
     {
         $this->setProcedureName($procedureName);
 
@@ -56,7 +60,7 @@ class Procedure
     public function processRegister(Session $session, RegisterMessage $msg, ?Registration $registration = null): bool
     {
         if ($registration === null) {
-            $registration = Registration::createRegistrationFromRegisterMessage($session, $msg);
+            $registration = Registration::createRegistrationFromRegisterMessage($session, $msg, $this->adapter);
         }
 
         if (count($this->registrations) > 0) {
@@ -132,14 +136,9 @@ class Procedure
                 throw new \Exception('Registration and procedure must agree on disclose caller');
             }
 
-            $this->registrations[] = $registration;
+            $this->saveRegistration($registration, $msg);
 
             $registration->getSession()->sendMessage(new RegisteredMessage($msg->getRequestId(), $registration->getId()));
-
-            // now that we have added a new registration, process the queue if we are using it
-            if ($this->getAllowMultipleRegistrations()) {
-                $this->processQueue();
-            }
 
             return true;
         } catch (\Exception $e) {
@@ -149,19 +148,45 @@ class Procedure
         }
     }
 
+    public function saveRegistration(Registration $registration, RegisterMessage $message): void
+    {
+        $this->registrations[$registration->getSession()->getTransportId() . ':' . $registration->getId()] = $registration;
+
+        $session = $registration->getSession();
+        $id =  $session->getTransportId() . ':' . $registration->getId();
+        $this->adapter->setField('proc:' . $this->getProcedureName() . ':regs', $id, [
+            'id' => $registration->getId(),
+            'sessionId' => $session->getId(),
+            'transportId' => $session->getTransportId(),
+            'message' => $message->getMessageParts(),
+        ]);
+    }
+
     /**
      * Get registration by ID
      *
      * @param $registrationId
      * @return bool|Registration
      */
-    public function getRegistrationById($registrationId): ?Registration
+    public function getRegistrationById(Session $session, $registrationId): ?Registration
     {
-        /** @var Registration $registration */
-        foreach ($this->registrations as $registration) {
-            if ($registration->getId() == $registrationId) {
-                return $registration;
-            }
+        $key = $session->getTransportId() . ':' . $registrationId;
+
+        return $this->getRegistrationByKey($key);
+    }
+
+    public function getRegistrationByKey(string $key): ?Registration
+    {
+        if (isset($this->registrations[$key])) {
+            return $this->registrations[$key];
+        }
+
+        $procedureRegKey = 'proc:' . $this->procedureName . ':regs';
+        $result = $this->adapter->get($procedureRegKey, [$key]);
+
+        $registrationRaw = $result[$key] ?? null;
+        if ($registrationRaw !== null) {
+            return $this->generateRegistrationFromRaw($registrationRaw);
         }
 
         return null;
@@ -169,151 +194,133 @@ class Procedure
 
     public function processUnregister(Session $session, UnregisterMessage $msg): bool
     {
-        for ($i = 0; $i < count($this->registrations); $i++) {
-            /** @var Registration $registration */
-            $registration = $this->registrations[$i];
-            if ($registration->getId() == $msg->getRegistrationId()) {
-
-                // make sure the session is the correct session
-                if ($registration->getSession() !== $session) {
-                    $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($msg, "wamp.error.no_such_registration"));
-                    //$this->manager->warning("Tried to unregister a procedure that belongs to a different session.");
-                    return false;
-                }
-
-                array_splice($this->registrations, $i, 1);
-
-                // TODO: need to handle any calls that are hanging around
-
-                $session->sendMessage(UnregisteredMessage::createFromUnregisterMessage($msg));
-                return true;
-            }
+        $registration = $this->getRegistrationById($session, $msg->getRegistrationId());
+        if ($registration === null) {
+            $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($msg, 'wamp.error.no_such_registration'));
+            return false;
         }
+        $key = $session->getTransportId() . ':' . $registration->getId();
+        unset($this->registrations[$key]);
+        $this->adapter->del('proc:' . $this->getProcedureName() . ':regs', [$key]);
 
-        $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($msg, 'wamp.error.no_such_registration'));
+        Coroutine::create(function () use ($session, $msg) {
+            $this->cancelCalls($session, $msg->getRegistrationId());
+        });
 
-        return false;
+        $session->sendMessage(UnregisteredMessage::createFromUnregisterMessage($msg));
+
+        return true;
     }
 
     public function processCall(Session $session, Call $call): bool
     {
         // find a registration to call
-        if (count($this->registrations) == 0) {
+        if ($this->hasRegistrations()) {
             $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($call->getCallMessage(), 'wamp.error.no_such_procedure'));
             return false;
         }
 
+        $registration = null;
         // just send it to the first one if we don't allow multiple registrations
         if (!$this->getAllowMultipleRegistrations()) {
-            $this->registrations[0]->processCall($call);
-        } else {
-            $this->callQueue->enqueue($call);
-            $this->processQueue();
+            $registration = $this->getFirstRegistration();
+        } elseif (strcasecmp($this->getInvokeType(), Registration::FIRST_REGISTRATION) === 0) {
+            $registration = $this->getFirstRegistration();
+        } elseif (strcasecmp($this->getInvokeType(), Registration::LAST_REGISTRATION) === 0) {
+            $registration = $this->getLastRegistration();
+        } elseif (strcasecmp($this->getInvokeType(), Registration::RANDOM_REGISTRATION) === 0) {
+            $registration = $this->getRandomRegistration();
+        } elseif (strcasecmp($this->getInvokeType(), Registration::ROUNDROBIN_REGISTRATION) === 0) {
+            $registration = $this->getRoundRobinRegistration();
         }
+
+        if ($registration === null) {
+            $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($call->getCallMessage(), 'wamp.error.no_such_procedure'));
+            return false;
+        }
+
+        $registration->processCall($call);
 
         return true;
     }
 
-    /**
-     * Process the Queue
-     *
-     * @throws \Exception
-     */
-    public function processQueue(): void
+    public function hasRegistrations(bool $global = true): bool
     {
-        if (!$this->getAllowMultipleRegistrations()) {
-            throw new \Exception("Queuing only allowed when there are multiple registrations");
+        if ($global) {
+            $registrations = $this->adapter->hkeys('proc:' . $this->procedureName . ':regs');
+
+            return !empty($registrations);
         }
 
-        // find the best candidate
-        while ($this->callQueue->count() > 0) {
-            $registration = null;
-
-            if (strcasecmp($this->getInvokeType(), Registration::FIRST_REGISTRATION) === 0) {
-                $registration = $this->getNextFirstRegistration();
-            } else if (strcasecmp($this->getInvokeType(), Registration::LAST_REGISTRATION) === 0) {
-                $registration = $this->getNextLastRegistration();
-            } else if (strcasecmp($this->getInvokeType(), Registration::RANDOM_REGISTRATION) === 0) {
-                $registration = $this->getNextRandomRegistration();
-            } else if (strcasecmp($this->getInvokeType(), Registration::ROUNDROBIN_REGISTRATION) === 0) {
-                $registration = $this->getNextRoundRobinRegistration();
-            }
-
-            if ($registration === null) {
-                break;
-            }
-            $call = $this->callQueue->dequeue();
-            $registration->processCall($call);
-        }
+        return !empty($this->registrations);
     }
 
-    private function getNextRandomRegistration(): Registration
+    public function getFirstRegistration(): ?Registration
     {
-        if (count($this->registrations) === 1) {
-            //just return this so that we don't have to run mt_rand
-            return $this->registrations[0];
-        }
-        //mt_rand is apparently faster than array_rand(which uses the libc generator)
-        return $this->registrations[mt_rand(0, count($this->registrations) - 1)];
-    }
-
-    private function getNextRoundRobinRegistration(): Registration
-    {
-        $bestRegistration = $this->registrations[0];
-        foreach ($this->registrations as $registration) {
-            if ($registration->getStatistics()['lastCallStartedAt'] <
-                $bestRegistration->getStatistics()['lastCallStartedAt']) {
-                $bestRegistration = $registration;
-                break;
-            }
-        }
-        return $bestRegistration;
-    }
-
-    private function getNextFirstRegistration(): Registration
-    {
-        return $this->registrations[0];
-    }
-
-    private function getNextLastRegistration(): Registration
-    {
-        return $this->registrations[count($this->registrations) - 1];
-    }
-
-    /**
-     * Remove all references to Call to it can be GCed
-     *
-     * @param Call $call
-     */
-    public function removeCall(Call $call): void
-    {
-        $newQueue = new \SplQueue();
-        while (!$this->callQueue->isEmpty()) {
-            $c = $this->callQueue->dequeue();
-
-            if ($c === $call)
-                continue;
-
-            $newQueue->enqueue($c);
-        }
-        $this->callQueue = $newQueue;
-
-        $registration = $call->getRegistration();
-        if ($registration) {
-            $registration->removeCall($call);
-        }
-    }
-
-    public function getCallByRequestId(int $requestId): ?Call
-    {
-        foreach ($this->registrations as $registration) {
-            $call = $registration->getCallByRequestId($requestId);
-            if ($call) {
-                return $call;
-            }
+        $procedureRegKey = 'proc:' . $this->procedureName . ':regs';
+        $keys = $this->adapter->hkeys($procedureRegKey);
+        if (count($keys) === 0) {
+            return null;
         }
 
-        return null;
+        return $this->getRegistrationByKey($keys[0]);
+    }
+
+    public function getLastRegistration(): ?Registration
+    {
+        $keys = $this->adapter->hkeys('proc:' . $this->procedureName . ':regs');
+        if (count($keys) === 0) {
+            return null;
+        }
+
+        $index = count($keys) - 1;
+
+        return $this->getRegistrationByKey($keys[$index]);
+    }
+
+    public function getRandomRegistration(): ?Registration
+    {
+        $keys = $this->adapter->get('proc:' . $this->procedureName . ':regs');
+        if (count($keys) === 0) {
+            return null;
+        }
+
+        $index = array_rand($keys);
+
+        return $this->getRegistrationByKey($keys[$index]);
+    }
+
+    public function getRoundRobinRegistration(): ?Registration
+    {
+        $index = $this->adapter->inc('proc:' . $this->procedureName, 1, 'lastCallIndex');
+        $totalRegistration = $this->adapter->countFields('proc:' . $this->procedureName . ':regs');
+        if ($index >= $totalRegistration) {
+            $index = 0;
+            $this->adapter->setField('proc:' . $this->procedureName, 'lastCallIndex', 0);
+        }
+        $keys = $this->adapter->hkeys('proc:' . $this->procedureName . ':regs');
+        if (count($keys) === 0) {
+            return null;
+        }
+
+        return $this->getRegistrationByKey($keys[$index]);
+    }
+
+    protected function generateRegistrationFromRaw(array $registrationRaw): Registration
+    {
+        $id = $registrationRaw['transportId'] . ':' . $registrationRaw['id'];
+
+        if (isset($this->registrations[$id])) {
+            return $this->registrations[$id];
+        }
+
+        $registerMessage = RegisterMessage::createMessageFromArray($registrationRaw['message']);
+        $session = $this->sessionStorage->getSessionUsingTransportId($registrationRaw['transportId']);
+
+        $registration = Registration::createRegistrationFromRegisterMessage($session, $registerMessage, $this->adapter);
+        $registration->setId($registrationRaw['id']);
+
+        return $registration;
     }
 
     public function getProcedureName(): string
@@ -380,11 +387,37 @@ class Procedure
         /* @var $registration Registration */
         foreach ($this->registrations as $i => $registration) {
             if ($registration->getSession() === $session) {
-                // if this session is the callee on pending calls - error them out
-                $registration->errorAllPendingCalls();
-                array_splice($this->registrations, $i, 1);
+                continue;
             }
+
+            $key = $session->getTransportId() . ':' . $registration->getId();
+            unset($this->registrations[$key]);
+            $this->adapter->del('proc:' . $this->getProcedureName() . ':regs', [$key]);
+
+            Coroutine::create(function () use ($session, $registration) {
+                $this->cancelCalls($session, $registration->getId());
+            });
         }
+    }
+
+    protected function cancelCalls(Session $session, string|int $registrationId): array
+    {
+        $key = Registration::generateKeyForInvocation('*', $session->getSessionId(), $registrationId, '*');
+        $results = $this->adapter->find($key);
+
+        foreach ($results as $result) {
+            $id = Registration::generateKeyForInvocation(
+                $result['callSessionId'],
+                $session->getSessionId(),
+                $registrationId,
+                $result['invocationId']
+            );
+            $this->adapter->del($id);
+            $callerSession = $this->sessionStorage->getSessionUsingTransportId($result['callTransportId']);
+            $callerSession->sendMessage(new ErrorMessage(Message::MSG_CALL, $result['callRequestId'], new \stdClass(), 'wamp.error.cancelled', [], new \stdClass()));
+        }
+
+        return $results;
     }
 
     /**

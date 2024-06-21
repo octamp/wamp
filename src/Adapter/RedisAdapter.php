@@ -98,4 +98,42 @@ class RedisAdapter extends \Octamp\Server\Adapter\RedisAdapter implements Adapte
 
         return (bool) $exists;
     }
+
+    public function hkeys(string $key): array
+    {
+        $client = $this->createPredis();
+        $keys = $client->hkeys($key);
+        $client->quit();
+
+        return $keys;
+    }
+
+    public function findWithRetainKey(string $search): array
+    {
+        $client = $this->createPredis();
+        $keys = $client->keys($search);
+        $results = [];
+        foreach ($keys as $key) {
+            $results[$key] = $this->decodeData($client->hgetall($key));
+        }
+
+        $client->quit();
+
+        return $results;
+    }
+
+    private function decodeData(array $data): array
+    {
+        foreach ($data as &$value) {
+            try {
+                $newValue = json_decode($value, true);
+                if (is_array($newValue)) {
+                    $value = $newValue;
+                }
+            } catch (\Exception $exception) {
+            }
+        }
+
+        return $data;
+    }
 }

@@ -2,6 +2,7 @@
 
 namespace Octamp\Wamp\Registration;
 
+use Octamp\Wamp\Adapter\AdapterInterface;
 use Octamp\Wamp\Session\Session;
 use Thruway\Common\Utils;
 use Thruway\Message\ErrorMessage;
@@ -101,7 +102,7 @@ class Registration
      * @param \Thruway\Session $session
      * @param string $procedureName
      */
-    public function __construct(Session $session, string $procedureName)
+    public function __construct(Session $session, string $procedureName, protected AdapterInterface $adapter)
     {
         $this->id = Utils::getUniqueId();
         $this->session = $session;
@@ -121,9 +122,9 @@ class Registration
         $this->completedCallTimeTotal = 0;
     }
 
-    public static function createRegistrationFromRegisterMessage(Session $session, RegisterMessage $msg): Registration
+    public static function createRegistrationFromRegisterMessage(Session $session, RegisterMessage $msg, AdapterInterface $adapter): Registration
     {
-        $registration = new Registration($session, $msg->getProcedureName());
+        $registration = new Registration($session, $msg->getProcedureName(), $adapter);
         $options = $msg->getOptions();
 
         if (isset($options->disclose_caller) && $options->disclose_caller === true) {
@@ -214,22 +215,37 @@ class Registration
             throw new \Exception("Registration already set when asked to process call");
         }
         $call->setRegistration($this);
+        $invocationMessage = $call->getInvocationMessage();
+        $key = static::generateKeyForInvocation(
+            $call->getCallerSession()->getSessionId(),
+            $call->getCalleeSession()->getSessionId(),
+            $call->getRegistration()->getId(),
+            $invocationMessage->getRequestId()
+        );
+        $this->adapter->set($key, [
+            'callRequestId' => $call->getCallMessage()->getRequestId(),
+            'callSessionId' => $call->getCallerSession()->getSessionId(),
+            'callTransportId' => $call->getCallerSession()->getTransportId(),
+            'calleeSessionId' => $call->getCalleeSession()->getSessionId(),
+            'calleeTransportId' => $call->getCalleeSession()->getTransportId(),
+            'invocationId' => $invocationMessage->getRequestId(),
+            'registrationId' => $invocationMessage->getRegistrationId(),
+            'hasResponse' => false,
+            'hasSentResult' => false,
+        ]);
 
-        $this->calls[] = $call;
+        $this->getSession()->sendMessage($invocationMessage);
+    }
 
-        $this->session->incPendingCallCount();
-        $callCount = count($this->calls);
-        if ($callCount == 1) {
-            // we just became busy
-            $this->busyStart = microtime(true);
-        }
-        if ($callCount > $this->maxSimultaneousCalls) {
-            $this->maxSimultaneousCalls = $callCount;
-        }
-        $this->invocationCount++;
-        $this->lastCallStartedAt = new \DateTime();
-
-        $this->getSession()->sendMessage($call->getInvocationMessage());
+    public static function generateKeyForInvocation(string|int $callerId, string|int $calleeId, string|int $registrationId, string|int $requestId)
+    {
+        return sprintf(
+            'invoc:%s:%s:%s:%s',
+            $callerId,
+            $calleeId,
+            $registrationId,
+            $requestId
+        );
     }
 
     /**
@@ -313,6 +329,11 @@ class Registration
         foreach ($this->calls as $call) {
             $call->getCallerSession()->sendMessage(ErrorMessage::createErrorMessageFromMessage($call->getCallMessage(), 'wamp.error.canceled'));
         }
+    }
+
+    public function setId(int $id): void
+    {
+        $this->id = $id;
     }
 
     public function getStatistics(): array

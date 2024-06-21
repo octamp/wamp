@@ -42,7 +42,7 @@ class Wamp
     public function init(): void
     {
         $transportProvider = new OctampTransportProvider();
-        $this->adapter = new RedisAdapter('0.0.0.0', 6379);
+        $this->adapter = new RedisAdapter('192.168.0.167', 30011);
         $transportProvider->setAdapter($this->adapter);
         $this->transportProviders[] = $transportProvider;
 
@@ -58,8 +58,8 @@ class Wamp
             $this->realmManager->init($sessionStorage, $this->adapter);
 
             $router = new Router();
-            $router->addRole(new Broker($this->adapter, $sessionStorage));
-            $router->addRole(new Dealer($this->adapter, $sessionStorage));
+            $router->addRole(new Broker($this->adapter, $sessionStorage, $this->serverId));
+            $router->addRole(new Dealer($this->adapter, $sessionStorage, $this->serverId));
 
             $router->addTransportProviders($this->transportProviders);
 
