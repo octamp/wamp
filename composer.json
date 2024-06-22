@@ -18,7 +18,8 @@
         "octamp/server": "^1.0",
         "voryx/thruway": "^0.4.2",
         "symfony/event-dispatcher": "^2.8",
-        "octamp/client": "^1.3"
+        "octamp/client": "^1.3",
+        "symfony/dotenv": "^7.1"
     },
     "require-dev": {
         "openswoole/ide-helper": "^22.1"

@@ -7,7 +7,7 @@ use Octamp\Server\Connection\Connection;
 use Octamp\Server\Generator\RedisIDGenerator;
 use Octamp\Server\Server;
 use Octamp\Wamp\Adapter\AdapterInterface;
-use Octamp\Wamp\Adapter\RedisAdapter;
+use Octamp\Wamp\Config\TransportProviderConfig;
 use Octamp\Wamp\Peers\Router;
 use Octamp\Wamp\Realm\RealmManager;
 use Octamp\Wamp\Roles\Broker;
@@ -28,11 +28,9 @@ class Wamp
      */
     private array $transportProviders = [];
 
-    private AdapterInterface $adapter;
-
     protected string $serverId;
 
-    public function __construct()
+    public function __construct(private readonly TransportProviderConfig $config, private readonly AdapterInterface $adapter)
     {
         $this->realmManager = new RealmManager();
         $this->serverId = uniqid('', true);
@@ -42,7 +40,6 @@ class Wamp
     public function init(): void
     {
         $transportProvider = new OctampTransportProvider();
-        $this->adapter = new RedisAdapter('192.168.0.167', 30011);
         $transportProvider->setAdapter($this->adapter);
         $this->transportProviders[] = $transportProvider;
 

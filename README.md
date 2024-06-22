@@ -26,6 +26,21 @@ composer create-project octamp/wamp ./wamp
 
 This will create the project in wamp folder
 
+Copy the file `.env` to `.env.local`
+
+Update the necessary data
+```
+REDIS_HOST=0.0.0.0
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_USERNAME=
+REDIS_DATABASE=0
+
+SERVER_HOST=0.0.0.0
+SERVER_PORT=8080
+SERVER_WORKERNUM=1
+```
+
 Now run the bin/server
 
 ```shell

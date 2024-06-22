@@ -6,6 +6,7 @@ use Octamp\Server\Adapter\AdapterInterface;
 use Octamp\Server\Adapter\RedisAdapter;
 use Octamp\Server\Connection\Connection;
 use Octamp\Server\Server;
+use Octamp\Wamp\Config\TransportProviderConfig;
 use Octamp\Wamp\Event\ConnectionOpenEvent;
 use Octamp\Wamp\Peers\Router;
 use OpenSwoole\WebSocket\Frame;
@@ -19,10 +20,10 @@ class OctampTransportProvider implements TransportProviderInterface
 
     private array $routers = [];
 
-    public function __construct()
+    public function __construct(private readonly TransportProviderConfig $config)
     {
-        $this->websocketServer = Server::createWebsocketServer('0.0.0.0', 8080, [
-            'worker_num' => 1,
+        $this->websocketServer = Server::createWebsocketServer($this->config->host, $this->config->port, [
+            'worker_num' => $this->config->workerNum,
             'websocket_subprotocol' => 'wamp.2.json',
             'open_websocket_close_frame' => true,
             'open_websocket_ping_frame' => true,
