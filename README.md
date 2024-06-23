@@ -16,11 +16,11 @@ Session data and Wamp Datas will be save in Redis so that all node / server can 
 
 ### Comparison with other Implementation
 
-|                     | Octamp Wamp | Thruway       |
-|---------------------|-------------|---------------|
-| Horizontal Scalling | Supported   | Not Supported |
-| OpenSwoole          | /           | -             |
-| React PHP           | -           | /             |
+|                     | Octamp Wamp | Thruway |
+|---------------------|-------------|---------|
+| Horizontal Scalling | &check;     | &cross; |
+| Uses OpenSwoole     | &check;     | &cross; |
+| Uses React PHP      | &cross;     | &check; |
 
 ## Profile
 
@@ -65,6 +65,52 @@ php ./bin/server
 ```
 
 That will now run the server
+
+## Octamp Wamp Features
+
+- **High performance** - Uses OpenSwoole, network framework based on an event-driven, asynchronous, non-blocking I/O coroutine programming model for PHP.
+- **Scalable** - Designed for Horizontal Scalability.
+- **WAMP Basic Profile Features** - This project implements most of the basic profile features in WAMP v2.
+- **Websocket Transport** - Currently the project only implements websocket transport.
+- **JSON Serializer** - JSON serializer is the only available, messagepack and CBOR implementation still on development.
+
+## Basic Profile Feature Support
+
+### Sessions
+| Feature                 | Supported |
+|-------------------------|-----------|
+| Session Establishment   | &check;   |
+| Session Close / Closing | &check;   |
+| Abort                   | &check;   |
+
+### Publish and Subscribe
+| Feature                       | Supported |
+|-------------------------------|-----------|
+| Subscribe                     | &check;   |
+| Unsubscribe                   | &check;   |
+| Subscribe & Unsubscribe Error | &check;   |
+| Publish                       | &check;   |
+| Publish Error                 | &check;   |
+
+### Remote Procedure Calls
+| Feature                 | Supported |
+|-------------------------|-----------|
+| Register                | &check;   |
+| Unregister              | &check;   |
+| Call                    | &check;   |
+| Call / Invocation Error | &check;   |
+| Caller Leaving          | &check;   |
+| Callee Leaveing         | &check;   |
+
+### Other Features
+| Feature        | Supported |
+|----------------|-----------|
+| URI Validation | Partial   |
+
+
+## Advance Profile Feature Support
+
+The current version does not support Advance Profile Features
 
 ## TODOs
 
