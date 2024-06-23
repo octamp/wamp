@@ -20,6 +20,8 @@ interface AdapterInterface extends \Octamp\Server\Adapter\AdapterInterface
 
     public function find(string $search): array;
 
+    public function findOne(string $search): ?array;
+
     public function findWithRetainKey(string $search): array;
 
     public function keys(string $search): array;

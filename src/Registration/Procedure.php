@@ -7,6 +7,7 @@ use Octamp\Wamp\Adapter\AdapterInterface;
 use Octamp\Wamp\Session\Session;
 use Octamp\Wamp\Session\SessionStorage;
 use OpenSwoole\Coroutine;
+use Thruway\Message\CallMessage;
 use Thruway\Message\ErrorMessage;
 use Thruway\Message\Message;
 use Thruway\Message\RegisteredMessage;
@@ -37,7 +38,7 @@ class Procedure
      *
      * @param string $procedureName
      */
-    public function __construct(protected AdapterInterface $adapter, protected SessionStorage $sessionStorage, string $procedureName, protected bool $processSets = true)
+    public function __construct(protected AdapterInterface $adapter, protected SessionStorage $sessionStorage, string $procedureName, public bool $processSets = true)
     {
         $this->setProcedureName($procedureName);
 
@@ -60,10 +61,10 @@ class Procedure
     public function processRegister(Session $session, RegisterMessage $msg, ?Registration $registration = null): bool
     {
         if ($registration === null) {
-            $registration = Registration::createRegistrationFromRegisterMessage($session, $msg, $this->adapter);
+            $registration = Registration::createRegistrationFromRegisterMessage($session, $msg, $this->adapter, $this->sessionStorage);
         }
 
-        if (count($this->registrations) > 0) {
+        if ($this->hasRegistrations(true)) {
             // we already have something registered
             if ($this->getAllowMultipleRegistrations()) {
                 return $this->addRegistration($registration, $msg);
@@ -74,14 +75,17 @@ class Procedure
 
                 $options = $msg->getOptions();
                 // get the existing registration
+                $oldKey = array_key_first($this->registrations);
                 /** @var Registration $oldRegistration */
-                $oldRegistration = $this->registrations[0];
+                $oldRegistration = $this->registrations[$oldKey];
                 if (isset($options->replace_orphaned_session) && $options->replace_orphaned_session == "yes") {
                     try {
-                        $oldRegistration->getSession()->ping()
+                        return $oldRegistration->getSession()->ping()
                             ->then(function ($res) use ($session, $errorMsg) {
                                 // the ping came back - send procedure_already_exists
                                 $session->sendMessage($errorMsg);
+
+                                return false;
                             }, function ($r) use ($oldRegistration, $session, $registration, $msg) {
                                 // bring down the exiting session because the
                                 // ping timed out
@@ -93,7 +97,7 @@ class Procedure
 
                                 // complete this registration now
                                 return $this->addRegistration($registration, $msg);
-                            });
+                            })->wait();
                     } catch (\Exception $e) {
                         $session->sendMessage($errorMsg);
                     }
@@ -111,6 +115,8 @@ class Procedure
 
             return $this->addRegistration($registration, $msg);
         }
+
+        return false;
     }
 
     /**
@@ -212,14 +218,48 @@ class Procedure
         return true;
     }
 
+    public function processCallMessage(Session $session, CallMessage $message): bool
+    {
+        if (!$this->hasRegistrations()) {
+            $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($message, 'wamp.error.no_such_procedure'));
+            return false;
+        }
+
+        $registration = $this->getRegistrationForCall();
+
+        if ($registration === null) {
+            $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($message, 'wamp.error.no_such_procedure'));
+            return false;
+        }
+
+        $call = new Call($session, $message, $this);
+        $registration->processCall($call);
+
+        return true;
+    }
+
     public function processCall(Session $session, Call $call): bool
     {
         // find a registration to call
-        if ($this->hasRegistrations()) {
+        if (!$this->hasRegistrations()) {
             $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($call->getCallMessage(), 'wamp.error.no_such_procedure'));
             return false;
         }
 
+        $registration = $this->getRegistrationForCall();
+
+        if ($registration === null) {
+            $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($call->getCallMessage(), 'wamp.error.no_such_procedure'));
+            return false;
+        }
+
+        $registration->processCall($call);
+
+        return true;
+    }
+
+    protected function getRegistrationForCall(): ?Registration
+    {
         $registration = null;
         // just send it to the first one if we don't allow multiple registrations
         if (!$this->getAllowMultipleRegistrations()) {
@@ -234,14 +274,7 @@ class Procedure
             $registration = $this->getRoundRobinRegistration();
         }
 
-        if ($registration === null) {
-            $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($call->getCallMessage(), 'wamp.error.no_such_procedure'));
-            return false;
-        }
-
-        $registration->processCall($call);
-
-        return true;
+        return $registration;
     }
 
     public function hasRegistrations(bool $global = true): bool
@@ -317,7 +350,7 @@ class Procedure
         $registerMessage = RegisterMessage::createMessageFromArray($registrationRaw['message']);
         $session = $this->sessionStorage->getSessionUsingTransportId($registrationRaw['transportId']);
 
-        $registration = Registration::createRegistrationFromRegisterMessage($session, $registerMessage, $this->adapter);
+        $registration = Registration::createRegistrationFromRegisterMessage($session, $registerMessage, $this->adapter, $this->sessionStorage);
         $registration->setId($registrationRaw['id']);
 
         return $registration;
@@ -386,7 +419,7 @@ class Procedure
         // remove all registrations that belong to this session
         /* @var $registration Registration */
         foreach ($this->registrations as $i => $registration) {
-            if ($registration->getSession() === $session) {
+            if ($registration->getSession()->getTransportId() !== $session->getTransportId()) {
                 continue;
             }
 
@@ -414,7 +447,9 @@ class Procedure
             );
             $this->adapter->del($id);
             $callerSession = $this->sessionStorage->getSessionUsingTransportId($result['callTransportId']);
-            $callerSession->sendMessage(new ErrorMessage(Message::MSG_CALL, $result['callRequestId'], new \stdClass(), 'wamp.error.cancelled', [], new \stdClass()));
+            if ($callerSession !== null) {
+                $callerSession->sendMessage(new ErrorMessage(Message::MSG_CALL, $result['callRequestId'], new \stdClass(), 'wamp.error.cancelled', [], new \stdClass()));
+            }
         }
 
         return $results;

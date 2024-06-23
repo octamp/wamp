@@ -46,9 +46,7 @@ class Dealer extends AbstractRole implements RoleInterface
         }
 
         $procedure = $this->getProcedure($message->getProcedureName());
-
-        $call = new Call($session, $message, $procedure);
-        $procedure->processCall($session, $call);
+        $procedure->processCallMessage($session, $message);
     }
 
     public function onYieldMessage(Session $session, YieldMessage $message): void
@@ -56,7 +54,7 @@ class Dealer extends AbstractRole implements RoleInterface
         $details   = new \stdClass();
 
         $invocationKey = Registration::generateKeyForInvocation('*', $session->getSessionId(), '*', $message->getRequestId());
-        $invocationDetails = $this->adapter->get($invocationKey);
+        $invocationDetails = $this->adapter->findOne($invocationKey);
 
         if ($invocationDetails === null) {
             $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($message));
@@ -87,7 +85,7 @@ class Dealer extends AbstractRole implements RoleInterface
         $callerSession?->sendMessage($resultMessage);
         $this->adapter->setField($invocationKey, 'hasSentResult', true);
 
-        $this->removeCall($invocationKey);
+//        $this->removeCall($invocationKey);
     }
 
     public function removeCall(string $invocationKey): void
@@ -102,13 +100,16 @@ class Dealer extends AbstractRole implements RoleInterface
         if (!$exists) {
             $this->adapter->lock('proc:' . $procedureName . ':lock', $procedureName, 2, 2);
         }
-        $registration = Registration::createRegistrationFromRegisterMessage($session, $message, $this->adapter);
+        $registration = Registration::createRegistrationFromRegisterMessage($session, $message, $this->adapter, $this->sessionStorage);
         $procedure = $this->getProcedure($procedureName, $registration);
         $this->saveProcedure($procedure);
         if (!$exists) {
             $this->adapter->unlock('proc:' . $procedureName . ':lock', $procedureName);
         }
-        $procedure->processRegister($session, $message, $registration);
+        $success = $procedure->processRegister($session, $message, $registration);
+        if ($success) {
+            $this->saveProcedure($procedure);
+        }
     }
 
     protected function hasProcedure(string $procedureName): bool
@@ -141,6 +142,10 @@ class Dealer extends AbstractRole implements RoleInterface
         $procedure->setDiscloseCaller($procedureRaw['discloseCaller']);
         $procedure->setAllowMultipleRegistrations($procedureRaw['allowMultipleRegistrations']);
         $procedure->setInvokeType($procedureRaw['invokeType']);
+
+        if (!$procedure->hasRegistrations(true)) {
+            $procedure->processSets = true;
+        }
 
         return $procedure;
     }
@@ -179,10 +184,7 @@ class Dealer extends AbstractRole implements RoleInterface
         }
 
         $procedure->processUnregister($session, $message);
-        $localProcedure = $this->procedures[$registration->getProcedureName()] ?? null;
-        if ($localProcedure === $procedure && $localProcedure->hasRegistrations(false)) {
-            unset($this->procedures[$registration->getProcedureName()]);
-        }
+        $this->tryDeleteProcedure($registration->getProcedureName());
     }
 
     public function onErrorMessage(Session $session, ErrorMessage $message)
@@ -244,8 +246,10 @@ class Dealer extends AbstractRole implements RoleInterface
 
     public function onLeaveRealmEvent(Session $session, LeaveRealmEvent $event): void
     {
-        foreach ($this->procedures as $procedure) {
-            $procedure->leave($session);
+        $procedureNames = array_keys($this->procedures);
+        foreach ($procedureNames as $name) {
+            $this->procedures[$name]->leave($session);
+            $this->tryDeleteProcedure($name);
         }
 
         $search = Registration::generateKeyForInvocation($session->getSessionId(), '*', '*', '*');
@@ -253,7 +257,20 @@ class Dealer extends AbstractRole implements RoleInterface
         foreach ($results as $key => $result) {
             $this->adapter->del($key);
             $calleeSession = $this->sessionStorage->getSessionUsingTransportId($result['calleeTransportId']);
-            $calleeSession->sendMessage(new InterruptMessage($result['invocationId']));
+            $calleeSession->sendMessage(new InterruptMessage($result['invocationId'], (object)[]));
+        }
+    }
+
+    public function tryDeleteProcedure(string $name): void
+    {
+        if (!$this->procedures[$name]->hasRegistrations(true)) {
+            $this->adapter->del('proc:' . $name);
+            $this->adapter->del('proc:' . $name . ':regs');
+            $this->adapter->del('proc:' . $name . ':lock');
+
+            unset($this->procedures[$name]);
+        } elseif (!$this->procedures[$name]->hasRegistrations(false)) {
+            unset($this->procedures[$name]);
         }
     }
 }

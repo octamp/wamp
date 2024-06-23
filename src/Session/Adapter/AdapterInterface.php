@@ -21,4 +21,6 @@ interface AdapterInterface
     public function findByOne(string $key, mixed $value): ?array;
 
     public function remove(Session $session): void;
+
+    public function incId(Session $session, string $idName): int;
 }

@@ -136,4 +136,17 @@ class RedisAdapter extends \Octamp\Server\Adapter\RedisAdapter implements Adapte
 
         return $data;
     }
+
+    public function findOne(string $search): ?array
+    {
+        $client = $this->createPredis();
+        $keys = $client->keys($search);
+        $result = null;
+        if (!empty($keys)) {
+            $result = $this->decodeData($client->hgetall($keys[0]));
+        }
+        $client->quit();
+
+        return $result;
+    }
 }

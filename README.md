@@ -6,6 +6,22 @@ This was implemented using PHP OpenSwoole
 
 Currently, the Adapter use for this is Redis.
 
+## Why Use Octamp Wamp
+
+Octamp Wamp is created using PHP with OpenSwoole instead of Ratchet / React PHP.
+
+Octamp Wamp also support Horizontal Scaling with the help of Redis.
+
+Session data and Wamp Datas will be save in Redis so that all node / server can access it.
+
+### Comparison with other Implementation
+
+|                     | Octamp Wamp | Thruway       |
+|---------------------|-------------|---------------|
+| Horizontal Scalling | Supported   | Not Supported |
+| OpenSwoole          | /           | -             |
+| React PHP           | -           | /             |
+
 ## Profile
 
 Octamp Wamp currently implemented using [Basic Profile](https://wamp-proto.org/wamp_bp_latest_ietf.html) of WAMP Proto.
@@ -49,3 +65,9 @@ php ./bin/server
 ```
 
 That will now run the server
+
+## TODOs
+
+- [] Implement IDs Properly https://wamp-proto.org/wamp_bp_latest_ietf.html#name-ids
+- [] Implement MessagePack Serializer https://wamp-proto.org/wamp_bp_latest_ietf.html#name-serializers
+- [] Implement CBOR Serializer https://wamp-proto.org/wamp_bp_latest_ietf.html#name-serializers

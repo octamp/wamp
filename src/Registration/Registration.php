@@ -4,6 +4,7 @@ namespace Octamp\Wamp\Registration;
 
 use Octamp\Wamp\Adapter\AdapterInterface;
 use Octamp\Wamp\Session\Session;
+use Octamp\Wamp\Session\SessionStorage;
 use Thruway\Common\Utils;
 use Thruway\Message\ErrorMessage;
 use Thruway\Message\RegisterMessage;
@@ -102,7 +103,7 @@ class Registration
      * @param \Thruway\Session $session
      * @param string $procedureName
      */
-    public function __construct(Session $session, string $procedureName, protected AdapterInterface $adapter)
+    public function __construct(Session $session, string $procedureName, protected AdapterInterface $adapter, protected SessionStorage $sessionStorage)
     {
         $this->id = Utils::getUniqueId();
         $this->session = $session;
@@ -122,9 +123,9 @@ class Registration
         $this->completedCallTimeTotal = 0;
     }
 
-    public static function createRegistrationFromRegisterMessage(Session $session, RegisterMessage $msg, AdapterInterface $adapter): Registration
+    public static function createRegistrationFromRegisterMessage(Session $session, RegisterMessage $msg, AdapterInterface $adapter, SessionStorage $sessionStorage): Registration
     {
-        $registration = new Registration($session, $msg->getProcedureName(), $adapter);
+        $registration = new Registration($session, $msg->getProcedureName(), $adapter, $sessionStorage);
         $options = $msg->getOptions();
 
         if (isset($options->disclose_caller) && $options->disclose_caller === true) {
@@ -163,7 +164,7 @@ class Registration
     /**
      * @param boolean $allowMultipleRegistrations
      */
-    public function setAllowMultipleRegistrations(bool $allowMultipleRegistrations): bool
+    public function setAllowMultipleRegistrations(bool $allowMultipleRegistrations): void
     {
         $this->allowMultipleRegistrations = $allowMultipleRegistrations;
     }
@@ -351,4 +352,8 @@ class Registration
         ];
     }
 
+    public function getSessionStorage(): SessionStorage
+    {
+        return $this->sessionStorage;
+    }
 }

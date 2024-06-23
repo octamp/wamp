@@ -84,6 +84,11 @@ class SessionStorage
         $this->adapter->saveSession($session);
     }
 
+    public function incId(Session $session, string $idName): int
+    {
+        return $this->adapter->incId($session, $idName);
+    }
+
     public function setAdapter(AdapterInterface $adapter): void
     {
         $this->adapter = $adapter;

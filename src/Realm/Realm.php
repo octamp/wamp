@@ -50,6 +50,7 @@ class Realm
 
         $welcome = new WelcomeMessage($session->getId(), $message->getDetails());
         $session->sendMessage($welcome);
+        $this->sessionStorage->saveSession($session);
     }
 
     public function onLeaveRealmEvent(Session $session, LeaveRealmEvent $event): void

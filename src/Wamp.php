@@ -39,7 +39,7 @@ class Wamp
 
     public function init(): void
     {
-        $transportProvider = new OctampTransportProvider();
+        $transportProvider = new OctampTransportProvider($this->config);
         $transportProvider->setAdapter($this->adapter);
         $this->transportProviders[] = $transportProvider;
 
