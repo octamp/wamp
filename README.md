@@ -68,6 +68,8 @@ That will now run the server
 
 ## TODOs
 
-- [] Implement IDs Properly https://wamp-proto.org/wamp_bp_latest_ietf.html#name-ids
-- [] Implement MessagePack Serializer https://wamp-proto.org/wamp_bp_latest_ietf.html#name-serializers
-- [] Implement CBOR Serializer https://wamp-proto.org/wamp_bp_latest_ietf.html#name-serializers
+- [ ] Implement MessagePack Serializer https://wamp-proto.org/wamp_bp_latest_ietf.html#name-serializers
+- [ ] Implement CBOR Serializer https://wamp-proto.org/wamp_bp_latest_ietf.html#name-serializers
+- [ ] Implement Advance Profile
+- [ ] Remove Dependencies from Thruway Common
+- [ ] Add OpenSwoole Table Adapter as Data Provider

@@ -4,12 +4,12 @@ namespace Octamp\Wamp\Roles;
 
 use Octamp\Wamp\Adapter\AdapterInterface;
 use Octamp\Wamp\Event\LeaveRealmEvent;
+use Octamp\Wamp\Helper\IDHelper;
 use Octamp\Wamp\Session\Session;
 use Octamp\Wamp\Session\SessionStorage;
 use Octamp\Wamp\Subscription\Subscription;
 use OpenSwoole\Coroutine;
 use OpenSwoole\Coroutine\Channel;
-use Thruway\Common\Utils;
 use Thruway\Message\ErrorMessage;
 use Thruway\Message\EventMessage;
 use Thruway\Message\PublishedMessage;
@@ -72,7 +72,7 @@ class Broker extends AbstractRole implements RoleInterface
     public function onPublishMessage(Session $session, PublishMessage $message): void
     {
         if ($message->getPublicationId() === null) {
-            $message->setPublicationId(Utils::getUniqueId());
+            $message->setPublicationId(IDHelper::generateGlobalWampID());
         }
 
         $subscriptionGroupsUri = $this->adapter->keys('sub:*');
@@ -105,9 +105,7 @@ class Broker extends AbstractRole implements RoleInterface
             return null;
         }
         $subscribeMessage = SubscribeMessage::createMessageFromArray($raw['message']);
-
-        $subscribeMessage = Subscription::createSubscriptionFromSubscribeMessage($session, $subscribeMessage);
-        $subscribeMessage->setId($raw['subscriptionId']);
+        $subscribeMessage = Subscription::createSubscriptionFromSubscribeMessage($session, $subscribeMessage, $raw['subscriptionId']);
 
         return $subscribeMessage;
     }

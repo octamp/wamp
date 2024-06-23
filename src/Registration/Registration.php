@@ -3,6 +3,7 @@
 namespace Octamp\Wamp\Registration;
 
 use Octamp\Wamp\Adapter\AdapterInterface;
+use Octamp\Wamp\Helper\IDHelper;
 use Octamp\Wamp\Session\Session;
 use Octamp\Wamp\Session\SessionStorage;
 use Thruway\Common\Utils;
@@ -17,7 +18,7 @@ use Thruway\Message\RegisterMessage;
 class Registration
 {
 
-    private int $id;
+    private string $id;
 
     private Session $session;
 
@@ -103,9 +104,9 @@ class Registration
      * @param \Thruway\Session $session
      * @param string $procedureName
      */
-    public function __construct(Session $session, string $procedureName, protected AdapterInterface $adapter, protected SessionStorage $sessionStorage)
+    public function __construct(Session $session, string $procedureName, protected AdapterInterface $adapter, ?string $id = null)
     {
-        $this->id = Utils::getUniqueId();
+        $this->id = $id ?? IDHelper::generateRouterWampID($session->getServerId());
         $this->session = $session;
         $this->procedureName = $procedureName;
         $this->allowMultipleRegistrations = false;
@@ -123,9 +124,9 @@ class Registration
         $this->completedCallTimeTotal = 0;
     }
 
-    public static function createRegistrationFromRegisterMessage(Session $session, RegisterMessage $msg, AdapterInterface $adapter, SessionStorage $sessionStorage): Registration
+    public static function createRegistrationFromRegisterMessage(Session $session, RegisterMessage $msg, AdapterInterface $adapter, ?string $id = null): Registration
     {
-        $registration = new Registration($session, $msg->getProcedureName(), $adapter, $sessionStorage);
+        $registration = new Registration($session, $msg->getProcedureName(), $adapter, $id);
         $options = $msg->getOptions();
 
         if (isset($options->disclose_caller) && $options->disclose_caller === true) {
@@ -223,6 +224,7 @@ class Registration
             $call->getRegistration()->getId(),
             $invocationMessage->getRequestId()
         );
+
         $this->adapter->set($key, [
             'callRequestId' => $call->getCallMessage()->getRequestId(),
             'callSessionId' => $call->getCallerSession()->getSessionId(),
@@ -295,7 +297,7 @@ class Registration
         }
     }
 
-    public function getId(): int
+    public function getId(): string
     {
         return $this->id;
     }

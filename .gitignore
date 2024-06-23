@@ -3,5 +3,7 @@ composer.lock
 
 examples/
 
+.env.*
+
 # IDE
 .idea

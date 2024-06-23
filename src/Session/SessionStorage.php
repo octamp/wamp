@@ -27,7 +27,7 @@ class SessionStorage
 
     public function createSession(AbstractTransport $transport, ?string $serverId = null): Session
     {
-        $session = new Session($transport, $serverId ?? $this->serverId);
+        $session = new Session($transport, $serverId ?? $this->serverId, $this->adapter);
 
         $id = $this->adapter->generateId();
         $session->setId($id);
@@ -37,13 +37,15 @@ class SessionStorage
 
     public function createDummy(): Session
     {
-        return new Session(new DummyTransport(), $this->serverId);
+        return new Session(new DummyTransport(), $this->serverId, $this->adapter);
     }
 
     public function createFromArray(array $data): ?Session
     {
         $id = $data['id'];
         $transportId = $data['transportId'];
+        $serverId = $data['serverId'];
+
         $session = $this->getSessionUsingTransportId($transportId, false);
         if ($session !== null) {
             return $session;
@@ -66,7 +68,7 @@ class SessionStorage
 
         $realm = $this->realmManager->getRealm($data['realm']);
 
-        $session = new Session($transport, $serverId ?? $this->serverId);
+        $session = new Session($transport, $serverId ?? $this->serverId, $this->adapter);
         $session->setId($id);
         $session->setAuthenticated($data['authenticated']);
         $session->setRealm($realm);
@@ -82,11 +84,6 @@ class SessionStorage
         }
         $this->transportSessions[$session->getTransportId()] = $session;
         $this->adapter->saveSession($session);
-    }
-
-    public function incId(Session $session, string $idName): int
-    {
-        return $this->adapter->incId($session, $idName);
     }
 
     public function setAdapter(AdapterInterface $adapter): void

@@ -22,5 +22,5 @@ interface AdapterInterface
 
     public function remove(Session $session): void;
 
-    public function incId(Session $session, string $idName): int;
+    public function incWampIdName(Session $session, string $idName): int;
 }

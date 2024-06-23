@@ -2,6 +2,7 @@
 
 namespace Octamp\Wamp\Subscription;
 
+use Octamp\Wamp\Helper\IDHelper;
 use Octamp\Wamp\Session\Session;
 use Thruway\Common\Utils;
 use Thruway\Message\EventMessage;
@@ -25,24 +26,24 @@ class Subscription
 
     private bool $disclosePublisher;
 
-    public function __construct(string $uri, Session $session, array|object|null $options = null)
+    public function __construct(string $uri, Session $session, array|object|null $options = null, ?string $id = null)
     {
 
-        $this->uri               = $uri;
-        $this->session           = $session;
-        $this->id                = Utils::getUniqueId();
+        $this->uri = $uri;
+        $this->session = $session;
+        $this->id = $id ?? IDHelper::generateRouterWampID($session->getServerId());
         $this->disclosePublisher = false;
-        $this->pausedForState    = false;
-        $this->pauseQueue        = new \SplQueue();
+        $this->pausedForState = false;
+        $this->pauseQueue = new \SplQueue();
 
         $this->setOptions($options);
 
     }
 
-    public static function createSubscriptionFromSubscribeMessage(Session $session, SubscribeMessage $msg): static
+    public static function createSubscriptionFromSubscribeMessage(Session $session, SubscribeMessage $msg, ?string $id = null): static
     {
         $options      = $msg->getOptions();
-        $subscription = new static($msg->getTopicName(), $session, $options);
+        $subscription = new static($msg->getTopicName(), $session, $options, $id);
 
         if (isset($options->disclose_publisher) && $options->disclose_publisher === true) {
             $subscription->setDisclosePublisher(true);
@@ -51,7 +52,7 @@ class Subscription
         return $subscription;
     }
 
-    public function setId(float|int $id): void
+    public function setId(string $id): void
     {
         $this->id = $id;
     }

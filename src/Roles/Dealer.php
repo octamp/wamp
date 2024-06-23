@@ -75,7 +75,7 @@ class Dealer extends AbstractRole implements RoleInterface
 
         $this->adapter->setField($invocationKey, 'hasResponse', true);
         $resultMessage = new ResultMessage(
-            $invocationDetails['callRequestId'],
+            (int) $invocationDetails['callRequestId'],
             $details,
             $message->getArguments(),
             $message->getArgumentsKw()
@@ -85,7 +85,7 @@ class Dealer extends AbstractRole implements RoleInterface
         $callerSession?->sendMessage($resultMessage);
         $this->adapter->setField($invocationKey, 'hasSentResult', true);
 
-//        $this->removeCall($invocationKey);
+        $this->removeCall($invocationKey);
     }
 
     public function removeCall(string $invocationKey): void
@@ -100,16 +100,17 @@ class Dealer extends AbstractRole implements RoleInterface
         if (!$exists) {
             $this->adapter->lock('proc:' . $procedureName . ':lock', $procedureName, 2, 2);
         }
-        $registration = Registration::createRegistrationFromRegisterMessage($session, $message, $this->adapter, $this->sessionStorage);
+        $registration = Registration::createRegistrationFromRegisterMessage($session, $message, $this->adapter);
         $procedure = $this->getProcedure($procedureName, $registration);
         $this->saveProcedure($procedure);
         if (!$exists) {
             $this->adapter->unlock('proc:' . $procedureName . ':lock', $procedureName);
         }
-        $success = $procedure->processRegister($session, $message, $registration);
-        if ($success) {
-            $this->saveProcedure($procedure);
-        }
+        $procedure->processRegister($session, $message, $registration)->then(function ($result) use($procedure) {
+            if ($result) {
+                $this->saveProcedure($procedure);
+            }
+        });
     }
 
     protected function hasProcedure(string $procedureName): bool

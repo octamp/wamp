@@ -98,7 +98,7 @@ class RedisAdapter implements AdapterInterface
         return 'ses:' . $sessionId . ':' . base64_encode($transportId);
     }
 
-    public function incId(Session $session, string $idName): int
+    public function incWampIdName(Session $session, string $idName): int
     {
         $id = $this->getKeyBySession($session);
 

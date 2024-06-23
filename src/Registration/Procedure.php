@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Octamp\Wamp\Registration;
 
+use Octamp\Client\Promise\Promise;
 use Octamp\Wamp\Adapter\AdapterInterface;
 use Octamp\Wamp\Session\Session;
 use Octamp\Wamp\Session\SessionStorage;
@@ -14,7 +15,6 @@ use Thruway\Message\RegisteredMessage;
 use Thruway\Message\RegisterMessage;
 use Thruway\Message\UnregisteredMessage;
 use Thruway\Message\UnregisterMessage;
-use function MongoDB\Driver\Monitoring\removeSubscriber;
 
 class Procedure
 {
@@ -55,32 +55,30 @@ class Procedure
      *
      * @param Session $session
      * @param \Thruway\Message\RegisterMessage $msg
-     * @return bool
+     * @return \Octamp\Client\Promise\PromiseInterface
      * @throws \Exception
      */
-    public function processRegister(Session $session, RegisterMessage $msg, ?Registration $registration = null): bool
+    public function processRegister(Session $session, RegisterMessage $msg, ?Registration $registration = null): \Octamp\Client\Promise\PromiseInterface
     {
-        if ($registration === null) {
-            $registration = Registration::createRegistrationFromRegisterMessage($session, $msg, $this->adapter, $this->sessionStorage);
-        }
+        return Promise::create(function ($resolve, $reject) use ($session, $msg, $registration) {
+            if ($registration === null) {
+                $registration = Registration::createRegistrationFromRegisterMessage($session, $msg, $this->adapter);
+            }
 
-        if ($this->hasRegistrations(true)) {
-            // we already have something registered
-            if ($this->getAllowMultipleRegistrations()) {
-                return $this->addRegistration($registration, $msg);
-            } else {
-                // we are not allowed multiple registrations, but we may want
-                // to replace an orphaned session
-                $errorMsg = ErrorMessage::createErrorMessageFromMessage($msg, 'wamp.error.procedure_already_exists');
+            if ($this->hasRegistrations(true)) {
+                // we already have something registered
+                if ($this->getAllowMultipleRegistrations()) {
+                    $resolve($this->addRegistration($registration, $msg));
+                    return;
+                } else {
+                    // we are not allowed multiple registrations, but we may want
+                    // to replace an orphaned session
+                    $errorMsg = ErrorMessage::createErrorMessageFromMessage($msg, 'wamp.error.procedure_already_exists');
+                    $options = $msg->getOptions();
+                    $oldRegistration = $this->getFirstRegistration();
 
-                $options = $msg->getOptions();
-                // get the existing registration
-                $oldKey = array_key_first($this->registrations);
-                /** @var Registration $oldRegistration */
-                $oldRegistration = $this->registrations[$oldKey];
-                if (isset($options->replace_orphaned_session) && $options->replace_orphaned_session == "yes") {
                     try {
-                        return $oldRegistration->getSession()->ping()
+                        $promise = $oldRegistration->getSession()->ping()
                             ->then(function ($res) use ($session, $errorMsg) {
                                 // the ping came back - send procedure_already_exists
                                 $session->sendMessage($errorMsg);
@@ -96,27 +94,34 @@ class Procedure
                                 $deadSession->shutdown();
 
                                 // complete this registration now
+                                $this->setDiscloseCaller($registration->getDiscloseCaller());
+                                $this->setAllowMultipleRegistrations($registration->getAllowMultipleRegistrations());
+                                $this->setInvokeType($registration->getInvokeType());
+
                                 return $this->addRegistration($registration, $msg);
-                            })->wait();
+                            });
+
+                        $result = $promise->wait();
+                        $resolve($result);
+                        return;
                     } catch (\Exception $e) {
                         $session->sendMessage($errorMsg);
                     }
-                } else {
-                    $session->sendMessage($errorMsg);
                 }
-            }
-        } else {
-            if ($this->processSets) {
-                // setup the procedure to match the options
-                $this->setDiscloseCaller($registration->getDiscloseCaller());
-                $this->setAllowMultipleRegistrations($registration->getAllowMultipleRegistrations());
-                $this->setInvokeType($registration->getInvokeType());
+            } else {
+                if ($this->processSets) {
+                    // setup the procedure to match the options
+                    $this->setDiscloseCaller($registration->getDiscloseCaller());
+                    $this->setAllowMultipleRegistrations($registration->getAllowMultipleRegistrations());
+                    $this->setInvokeType($registration->getInvokeType());
+                }
+
+                $resolve($this->addRegistration($registration, $msg));
+                return;
             }
 
-            return $this->addRegistration($registration, $msg);
-        }
-
-        return false;
+            $resolve(false);
+        });
     }
 
     /**
@@ -226,7 +231,6 @@ class Procedure
         }
 
         $registration = $this->getRegistrationForCall();
-
         if ($registration === null) {
             $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($message, 'wamp.error.no_such_procedure'));
             return false;
@@ -350,8 +354,7 @@ class Procedure
         $registerMessage = RegisterMessage::createMessageFromArray($registrationRaw['message']);
         $session = $this->sessionStorage->getSessionUsingTransportId($registrationRaw['transportId']);
 
-        $registration = Registration::createRegistrationFromRegisterMessage($session, $registerMessage, $this->adapter, $this->sessionStorage);
-        $registration->setId($registrationRaw['id']);
+        $registration = Registration::createRegistrationFromRegisterMessage($session, $registerMessage, $this->adapter, $registrationRaw['id']);
 
         return $registration;
     }

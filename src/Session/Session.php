@@ -5,6 +5,7 @@ namespace Octamp\Wamp\Session;
 use Octamp\Client\Promise\Promise;
 use Octamp\Wamp\Event\LeaveRealmEvent;
 use Octamp\Wamp\Realm\Realm;
+use Octamp\Wamp\Session\Adapter\AdapterInterface;
 use Octamp\Wamp\Transport\AbstractTransport;
 use Thruway\Authentication\AuthenticationDetails;
 use Thruway\Message\AbortMessage;
@@ -30,7 +31,7 @@ class Session
 
     protected ?AuthenticationDetails $authenticationDetails = null;
 
-    public function __construct(protected AbstractTransport $transport, protected string $serverId)
+    public function __construct(protected AbstractTransport $transport, protected string $serverId, protected AdapterInterface $adapter)
     {
     }
 
@@ -205,5 +206,10 @@ class Session
     public function getAuthenticationDetails(): AuthenticationDetails
     {
         return $this->authenticationDetails;
+    }
+
+    public function incrementWampId(): int|float
+    {
+        return $this->adapter->incWampIdName($this, 'wampId');
     }
 }

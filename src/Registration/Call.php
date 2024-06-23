@@ -2,6 +2,7 @@
 
 namespace Octamp\Wamp\Registration;
 
+use Octamp\Wamp\Helper\IDHelper;
 use Thruway\Common\Utils;
 use Octamp\Wamp\Session\Session;
 use Thruway\Message\CallMessage;
@@ -255,7 +256,7 @@ class Call
                 throw new \Exception("You must set the CallMessage prior to calling getInvocationMessage");
             }
             if ($this->invocationRequestId === null) {
-                $this->invocationRequestId = $this->getRegistration()->getSessionStorage()->incId($this->getCalleeSession(), 'invocationId');
+                $this->invocationRequestId = IDHelper::incrementSessionWampID($this->getCalleeSession());
             }
 
             $invocationMessage = new InvocationMessage(
