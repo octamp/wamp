@@ -19,7 +19,8 @@
         "voryx/thruway": "^0.4.2",
         "symfony/event-dispatcher": "^2.8",
         "octamp/client": "^1.3",
-        "symfony/dotenv": "^7.1"
+        "symfony/dotenv": "^7.1",
+        "rybakit/msgpack": "^0.9.1"
     },
     "require-dev": {
         "openswoole/ide-helper": "^22.1"

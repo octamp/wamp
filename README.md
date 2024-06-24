@@ -72,7 +72,12 @@ That will now run the server
 - **Scalable** - Designed for Horizontal Scalability.
 - **WAMP Basic Profile Features** - This project implements most of the basic profile features in WAMP v2.
 - **Websocket Transport** - Currently the project only implements websocket transport.
-- **JSON Serializer** - JSON serializer is the only available, messagepack and CBOR implementation still on development.
+- **Message Serializer** - Accepts JSON and MessagePack.
+
+### Message Serializer
+
+- JSON
+- MessagePack
 
 ## Basic Profile Feature Support
 
@@ -114,7 +119,6 @@ The current version does not support Advance Profile Features
 
 ## TODOs
 
-- [ ] Implement MessagePack Serializer https://wamp-proto.org/wamp_bp_latest_ietf.html#name-serializers
 - [ ] Implement CBOR Serializer https://wamp-proto.org/wamp_bp_latest_ietf.html#name-serializers
 - [ ] Implement Advance Profile
 - [ ] Remove Dependencies from Thruway Common

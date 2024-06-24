@@ -25,7 +25,7 @@ class OctampTransport extends AbstractTransport
 
     public function sendMessage(Message $msg): void
     {
-        $this->connection->send($this->getSerializer()->serialize($msg));
+        $this->connection->send($this->getSerializer()->serialize($msg), $this->getSerializer()->opcode());
     }
 
     public function close(): void

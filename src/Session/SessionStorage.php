@@ -3,12 +3,13 @@
 namespace Octamp\Wamp\Session;
 
 use Octamp\Server\Connection\ConnectionStorage;
+use Octamp\Wamp\Helper\SerializerHelper;
 use Octamp\Wamp\Realm\RealmManager;
+use Octamp\Wamp\Serializer\JsonSerializer;
 use Octamp\Wamp\Session\Adapter\AdapterInterface;
 use Octamp\Wamp\Transport\AbstractTransport;
 use Octamp\Wamp\Transport\DummyTransport;
 use Octamp\Wamp\Transport\OctampTransport;
-use Thruway\Serializer\JsonSerializer;
 
 class SessionStorage
 {
@@ -58,12 +59,23 @@ class SessionStorage
 
         $transportClass = $data['transportClass'];
         $serializerClass = $data['serializerClass'] ?? null;
+        $websocketProtocol = $data['websocketProtocol'] ?? null;
         /** @var OctampTransport $transport */
         $transport = new $transportClass($connection);
-        if ($serializerClass === null) {
-            $transport->setSerializer(new JsonSerializer());
-        } else {
-            $transport->setSerializer(new $serializerClass());
+
+        if ($websocketProtocol !== null) {
+            $serializer = SerializerHelper::getSerializer($websocketProtocol);
+            if ($serializer !== null) {
+                $transport->setSerializer($serializer);
+            }
+        }
+
+        if ($transport->getSerializer() === null) {
+            if ($serializerClass === null) {
+                $transport->setSerializer(new JsonSerializer());
+            } else {
+                $transport->setSerializer(new $serializerClass());
+            }
         }
 
         $realm = $this->realmManager->getRealm($data['realm']);

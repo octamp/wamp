@@ -4,13 +4,13 @@ namespace Octamp\Wamp\Transport;
 
 use Octamp\Client\Promise\Promise;
 use Octamp\Server\Connection\Connection;
+use Octamp\Wamp\Serializer\WampMessageSerializerInterface;
 use OpenSwoole\WebSocket\Frame;
 use Thruway\Exception\PingNotSupportedException;
-use Thruway\Serializer\SerializerInterface;
 
 abstract  class AbstractTransport
 {
-    protected ?SerializerInterface $serializer = null;
+    protected ?WampMessageSerializerInterface $serializer = null;
 
     /*
      * @var boolean
@@ -49,12 +49,12 @@ abstract  class AbstractTransport
         $this->trusted = $trusted;
     }
 
-    public function setSerializer(SerializerInterface $serializer): void
+    public function setSerializer(WampMessageSerializerInterface $serializer): void
     {
         $this->serializer = $serializer;
     }
 
-    public function getSerializer(): SerializerInterface
+    public function getSerializer(): ?WampMessageSerializerInterface
     {
         return $this->serializer;
     }

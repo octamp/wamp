@@ -9,16 +9,21 @@ use Octamp\Server\Server;
 use Octamp\Wamp\Adapter\AdapterInterface;
 use Octamp\Wamp\Config\TransportProviderConfig;
 use Octamp\Wamp\Helper\IDHelper;
+use Octamp\Wamp\Helper\SerializerHelper;
 use Octamp\Wamp\Peers\Router;
 use Octamp\Wamp\Realm\RealmManager;
 use Octamp\Wamp\Roles\Broker;
 use Octamp\Wamp\Roles\Dealer;
+use Octamp\Wamp\Serializer\JsonSerializer;
+use Octamp\Wamp\Serializer\MessagePackSerializer;
+use Octamp\Wamp\Serializer\WampMessageSerializerInterface;
 use Octamp\Wamp\Session\SessionStorage;
 use Octamp\Wamp\Transport\OctampTransport;
 use Octamp\Wamp\Transport\OctampTransportProvider;
 use Octamp\Wamp\Transport\TransportProviderInterface;
+use OpenSwoole\Http\Request;
+use OpenSwoole\Http\Response;
 use OpenSwoole\WebSocket\Frame;
-use Thruway\Serializer\JsonSerializer;
 
 class Wamp
 {
@@ -52,7 +57,6 @@ class Wamp
 
         $transportProvider->getServer()->on('afterStart', function (Server $server) {
             $this->serverId = $server->getServerId();
-
             $sessionAdapter = new \Octamp\Wamp\Session\Adapter\RedisAdapter($this->adapter);
             IDHelper::setAdapter($this->adapter);
             IDHelper::setSessionAdapter($sessionAdapter);
@@ -70,9 +74,30 @@ class Wamp
             $this->realmManager->addRealm($realm);
         });
 
+        $transportProvider->getServer()->on('handshake', function (Server $server, Request $request, Response $response) {
+            $protocolString = $request->header['sec-websocket-protocol'] ?? '';
+            if ($protocolString === '') {
+                return;
+            }
+
+            $protocols = array_map(function ($protocol) {
+                return trim($protocol);
+            }, explode(',', $protocolString));
+
+            $protocol = SerializerHelper::getFirstSupportedProtocols($protocols);
+            if ($protocol !== null) {
+                $response->header('Sec-Websocket-Protocol', $protocol);
+            }
+        });
+
         $transportProvider->getServer()->on('open', function (Server $server, Connection $connection) {
             $transport = new OctampTransport($connection);
-            $transport->setSerializer(new JsonSerializer());
+            $serializer = $this->getSerializer($connection->getRequest());
+            if ($serializer === null) {
+                $connection->close();
+                return;
+            }
+            $transport->setSerializer($serializer);
             $session = $this->realmManager->generateSession($transport);
             $this->realmManager->saveSession($session);
         });
@@ -105,7 +130,6 @@ class Wamp
 
                 return;
             }
-
             $session = null;
             $retry = 0;
             $maxRetry = 10;
@@ -126,7 +150,7 @@ class Wamp
 
             if ($frame->opcode === \OpenSwoole\WebSocket\Server::WEBSOCKET_OPCODE_PONG) {
                 $session->getTransport()->onPong($frame);
-            } elseif ($frame->opcode === \OpenSwoole\WebSocket\Server::WEBSOCKET_OPCODE_TEXT) {
+            } elseif ($frame->opcode === \OpenSwoole\WebSocket\Server::WEBSOCKET_OPCODE_TEXT || $frame->opcode === \OpenSwoole\WebSocket\Server::WEBSOCKET_OPCODE_BINARY) {
                 $message = $session->getTransport()->getSerializer()->deserialize($frame->data);
                 $this->realmManager->dispatch($session, $message);
             }
@@ -136,5 +160,24 @@ class Wamp
     public function run(): void
     {
         $this->transportProviders[0]->start();
+    }
+
+    protected function getSerializer(Request $request): ?WampMessageSerializerInterface
+    {
+        $protocolString = $request->header['sec-websocket-protocol'] ?? '';
+        if ($protocolString === '') {
+            return null;
+        }
+
+        $protocols = array_map(function ($protocol) {
+            return trim($protocol);
+        }, explode(',', $protocolString));
+
+        $protocolName = SerializerHelper::getFirstSupportedProtocols($protocols);
+        if ($protocolName === null) {
+            return null;
+        }
+
+        return SerializerHelper::getSerializer($protocolName);
     }
 }

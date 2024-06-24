@@ -28,6 +28,7 @@ class RedisAdapter implements AdapterInterface
             'trusted' => $session->isTrusted(),
             'transportClass' => get_class($session->getTransport()),
             'serializerClass' => get_class($session->getTransport()->getSerializer()),
+            'websocketProtocol' => $session->getTransport()->getSerializer()->protocolName(),
             'serverId' => $session->getServerId(),
         ];
 
