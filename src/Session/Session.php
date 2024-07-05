@@ -3,11 +3,11 @@
 namespace Octamp\Wamp\Session;
 
 use Octamp\Client\Promise\Promise;
+use Octamp\Wamp\Auth\AuthenticationDetails;
 use Octamp\Wamp\Event\LeaveRealmEvent;
 use Octamp\Wamp\Realm\Realm;
 use Octamp\Wamp\Session\Adapter\AdapterInterface;
 use Octamp\Wamp\Transport\AbstractTransport;
-use Thruway\Authentication\AuthenticationDetails;
 use Thruway\Message\AbortMessage;
 use Thruway\Message\HelloMessage;
 use Thruway\Message\Message;

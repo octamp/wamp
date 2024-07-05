@@ -123,3 +123,25 @@ The current version does not support Advance Profile Features
 - [ ] Implement Advance Profile
 - [ ] Remove Dependencies from Thruway Common
 - [ ] Add OpenSwoole Table Adapter as Data Provider
+
+### Authentication
+
+- [x] Static Anonymous
+- [ ] Function Anonymous
+- [ ] Dynamic Anonymous
+- [x] Static Ticket
+- [ ] Function Ticket
+- [ ] Dynamic Ticket
+- [ ] Static WAMP-CRA
+- [ ] Function WAMP-CRA
+- [ ] Dynamic WAMP-CRA
+- [ ] Static WAMP-SCRA
+- [ ] Function WAMP-SCRA
+- [ ] Dynamic WAMP-SCRA
+- [ ] Static Cryptosign
+- [ ] Function Cryptosign
+- [ ] Dynamic Cryptosign
+- [ ] TLS
+- [ ] Cookie
+- [ ] Add Feature
+- [ ] Add checking of role

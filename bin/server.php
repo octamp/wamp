@@ -5,7 +5,7 @@ use Octamp\Wamp\Config\TransportProviderConfig;
 use Octamp\Wamp\Wamp;
 use Symfony\Component\Dotenv\Dotenv;
 
-require_once __DIR__ . '/../vendor/autoload.php';
+$loader = require_once __DIR__ . '/../vendor/autoload.php';
 
 $env = new Dotenv();
 $env->loadEnv(dirname(__DIR__ . '') . '/.env');

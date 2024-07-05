@@ -7,6 +7,7 @@ use Octamp\Server\Connection\Connection;
 use Octamp\Server\Generator\RedisIDGenerator;
 use Octamp\Server\Server;
 use Octamp\Wamp\Adapter\AdapterInterface;
+use Octamp\Wamp\Auth\AuthManager;
 use Octamp\Wamp\Config\TransportProviderConfig;
 use Octamp\Wamp\Helper\IDHelper;
 use Octamp\Wamp\Helper\SerializerHelper;
@@ -28,6 +29,7 @@ use OpenSwoole\WebSocket\Frame;
 class Wamp
 {
     private RealmManager $realmManager;
+    private AuthManager $authManager;
 
     /**
      * @var TransportProviderInterface[]
@@ -38,7 +40,8 @@ class Wamp
 
     public function __construct(private readonly TransportProviderConfig $config, private readonly AdapterInterface $adapter)
     {
-        $this->realmManager = new RealmManager();
+        $this->authManager = new AuthManager($this->config->auth);
+        $this->realmManager = new RealmManager($this->authManager);
         $this->serverId = uniqid('');
         $this->init();
     }
