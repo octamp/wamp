@@ -2,6 +2,7 @@
 
 namespace Octamp\Wamp\Realm;
 
+use Octamp\Server\Connection\Connection;
 use Octamp\Wamp\Auth\AuthManager;
 use Octamp\Wamp\Event\EventInterface;
 use Octamp\Wamp\Event\LeaveRealmEvent;
@@ -17,6 +18,8 @@ use Thruway\Message\PublishMessage;
 class Realm
 {
     private ?Session $metaSession = null;
+
+    private ?Connection $connection = null;
 
     public function __construct(public readonly string $name, protected SessionStorage $sessionStorage, protected Router $router, protected AuthManager $authManager)
     {
@@ -84,9 +87,16 @@ class Realm
     public function getMetaSession(): Session
     {
         if ($this->metaSession === null) {
-            $this->metaSession = $this->sessionStorage->createDummy();
+            $this->metaSession = $this->sessionStorage->createDummy($this->connection);
+            $this->metaSession->setTrusted(true);
+            $this->addSession($this->metaSession);
         }
 
         return $this->metaSession;
+    }
+
+    public function setConnection(Connection $connection): void
+    {
+        $this->connection = $connection;
     }
 }

@@ -4,11 +4,16 @@ namespace Octamp\Wamp\Session;
 
 use Octamp\Client\Promise\Promise;
 use Octamp\Wamp\Auth\AuthenticationDetails;
+use Octamp\Wamp\Auth\Event\ResultMessageEvent;
+use Octamp\Wamp\Connection\Event\SendMessageEvent;
+use Octamp\Wamp\Connection\WithEventDispatcherInterface;
 use Octamp\Wamp\Event\LeaveRealmEvent;
 use Octamp\Wamp\Realm\Realm;
 use Octamp\Wamp\Session\Adapter\AdapterInterface;
+use Octamp\Wamp\Session\Event\MessageEvent;
 use Octamp\Wamp\Transport\AbstractTransport;
 use Thruway\Message\AbortMessage;
+use Thruway\Message\CallMessage;
 use Thruway\Message\HelloMessage;
 use Thruway\Message\Message;
 
@@ -33,6 +38,28 @@ class Session
 
     public function __construct(protected AbstractTransport $transport, protected string $serverId, protected AdapterInterface $adapter)
     {
+        $connection = $this->transport->getConnection();
+        if ($connection instanceof WithEventDispatcherInterface) {
+            $connection->on('SendMessage', [$this, 'onSendMessage']);
+        }
+    }
+
+    public function onSendMessage(SendMessageEvent $event): void
+    {
+        $connection = $this->transport->getConnection();
+        if (!($connection instanceof WithEventDispatcherInterface)) {
+            return;
+        }
+        if ($event->opcode !== \OpenSwoole\WebSocket\Server::WEBSOCKET_OPCODE_TEXT && $event->opcode !== \OpenSwoole\WebSocket\Server::WEBSOCKET_OPCODE_BINARY) {
+            return;
+        }
+        $message = $this->getTransport()->getSerializer()->deserialize($event->data);
+
+        $eventName = 'Message:' . $message->getMsgCode();
+        if (method_exists($message, 'getRequestId')) {
+            $eventName .= ':' . $message->getRequestId();
+        }
+        $connection->dispatch($eventName, new MessageEvent($this, $message));
     }
 
     public function setId(string $id): void

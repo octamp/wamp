@@ -1,10 +1,17 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Octamp\Wamp\Auth;
 
+use Octamp\Wamp\Promise\Promise;
+use Octamp\Wamp\Promise\PromiseInterface;
 use Octamp\Wamp\Realm\RealmManager;
 use Octamp\Wamp\Session\Session;
+use OpenSwoole\Coroutine;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Thruway\Message\AuthenticateMessage;
+use Thruway\Message\ChallengeMessage;
 use Thruway\Message\HelloMessage;
 use Thruway\Message\WelcomeMessage;
 
@@ -15,14 +22,19 @@ class AuthManager implements WithRealmManagerInterface
     public const STATUS_SUCCESS = 3;
     public const STATUS_FAILURE = 4;
 
+    public const HELLO_SUCCESS = 1;
+    public const HELLO_FAIL = 2;
+    public const HELLO_NEXT = 3;
+
+
     /**
      * @var AuthenticatorInterface[]
      */
     protected array $authenticators = [];
 
-    protected ?RealmManager $realmManager;
+    protected ?RealmManager $realmManager = null;
 
-    public function __construct(array $auths)
+    public function __construct(array $auths, protected EventDispatcherInterface $eventDispatcher)
     {
         foreach ($auths as $auth) {
             try {
@@ -57,22 +69,31 @@ class AuthManager implements WithRealmManagerInterface
 
     public function processHelloMessage(Session $session, HelloMessage $message): void
     {
-        $authenticators = $this->getAuthenticators($session, $message);
-        if (empty($authenticators)) {
-            $session->abort((object) ['message' => 'No matching authentication method'], ' wamp.error.no_matching_auth_method');
-            return;
-        }
+        Coroutine::create(function () use ($session, $message) {
+            $authenticators = $this->getAuthenticators($session, $message);
+            if (empty($authenticators)) {
+                $session->abort((object) ['message' => 'No matching authentication method'], ' wamp.error.no_matching_auth_method');
+                return;
+            }
 
-        $errorUri = 'wamp.error.authentication_failed';
-        $errorDetails = [];
+            $errorUri = 'wamp.error.authentication_failed';
+            $errorDetails = [];
 
-        foreach ($authenticators as $authenticator) {
-            $res = $authenticator->processHello($session, $message);
+            $promise = new Promise(function ($resolve) use ($authenticators, $session, $message, $errorUri, $errorDetails) {
+                $this->processHelloCurrentAuthenticators($authenticators, $session, $message, $errorUri, $errorDetails, $resolve);
+            });
+            $promise->then(function ($result) use ($session, $message) {
+                [$status,] = $result;
+                if ($status === self::HELLO_FAIL) {
+                    [, $uri, $details] = $result;
+                    $session->abort((object) $details, $uri);
+                    return;
+                }
+                [, $res, $authenticator] = $result;
 
-            $authDetailsRaw = $res['auth_details'] ?? [];
-            $status = $res['status'] ?? self::STATUS_FAILURE;
+                $authDetailsRaw = $res['auth_details'] ?? [];
+                $status = $res['status'];
 
-            if (in_array($status, [self::STATUS_CHALLENGE, self::STATUS_NO_CHALLENGE])) {
                 $authDetails = new AuthenticationDetails();
                 $authDetails->setAuthId($authDetailsRaw['authid']);
                 $authDetails->setAuthMethod($authenticator->getMethod());
@@ -88,32 +109,65 @@ class AuthManager implements WithRealmManagerInterface
                     $authDetails->setAuthExtra($authDetailsRaw['authextra']);
                 }
                 $session->setAuthenticationDetails($authDetails);
-            } else {
-                $errorUri = $res['error_uri'] ?? $errorUri;
-                $errorDetails = $res['error_details'] ?? $errorDetails;
-                continue;
+
+                if ($status === self::STATUS_CHALLENGE) {
+                    $challengeDetails = $res['challenge_details'];
+                    $authMethod = $challengeDetails['challenge_method'];
+                    $challenge = $challengeDetails['challenge'] ?? [];
+
+                    $session->getAuthenticationDetails()->setChallengeDetails($challengeDetails);
+                    $session->getAuthenticationDetails()->setChallenge($challenge);
+                    if (isset($res['verify_details'])) {
+                        $session->getAuthenticationDetails()->setVerificationDetails($res['verify_details']);
+                    }
+
+                    $challengeDetails = $session->getAuthenticationDetails()->getChallengeDetails();
+                    $session->sendMessage(new ChallengeMessage($authMethod, $challengeDetails));
+                } elseif ($status === self::STATUS_NO_CHALLENGE) {
+                    $session->setAuthenticated(true);
+                    $details = $session->getAuthenticationDetails()->jsonSerialize();
+                    // todo update roles for details
+                    $details = array_merge($details, (array) $message->getDetails());
+                    $session->sendMessage(new WelcomeMessage(
+                        $session->getSessionId(),
+                        $details
+                    ));
+                }
+            });
+        });
+    }
+
+    /**
+     * @param AuthenticatorInterface[] $authenticators
+     * @param Session $session
+     * @param HelloMessage $message
+     * @return void
+     */
+    public function processHelloCurrentAuthenticators(array &$authenticators, Session $session, HelloMessage $message, string $errorUri, array $errorDetails, callable $resolve): void
+    {
+        do {
+            if (key($authenticators) === null) {
+                $resolve([self::HELLO_FAIL, $errorUri, $errorDetails]);
+                break;
             }
 
-            if ($status === self::STATUS_CHALLENGE) {
-                $challengeDetails = $res['challenge_details'];
-                $authMethod = $challengeDetails['challenge_method'];
-                $challenge = $challengeDetails['challenge'] ?? [];
+            $authenticator = current($authenticators);
+            $promise = $authenticator->processHello($session, $message);
+            $restPromise = $promise->then(function ($res) use ($resolve, $authenticator, &$authenticators, &$errorUri, &$errorDetails, $session, $message) {
+                $status = $res['status'] ?? self::STATUS_FAILURE;
+                if (in_array($status, [self::STATUS_CHALLENGE, self::STATUS_NO_CHALLENGE])) {
+                    $resolve([self::HELLO_SUCCESS, $res, $authenticator]);
 
-                $session->getAuthenticationDetails()->setChallengeDetails($challengeDetails);
-                $session->getAuthenticationDetails()->setChallenge($challenge);
-
-                $challengeDetails = $session->getAuthenticationDetails()->getChallengeDetails();
-                $session->sendMessage(new ChallengeMessage($authMethod, $challengeDetails));
-
-                return;
-            } elseif ($status === self::STATUS_NO_CHALLENGE) {
-                $session->setAuthenticated(true);
-                $session->sendMessage(new WelcomeMessage($session->getSessionId(), $session->getAuthenticationDetails()->jsonSerialize()));
-                return;
-            }
-        }
-
-        $session->abort((object) $errorDetails, $errorUri);
+                    return false;
+                } else {
+                    $errorUri = $res['error_uri'] ?? $errorUri;
+                    $errorDetails = $res['error_details'] ?? $errorDetails;
+                    next($authenticators);
+                    return true;
+                }
+            });
+            $result = $restPromise->wait();
+        } while ($result);
     }
 
     public function processAuthenticateMessage(Session $session, AuthenticateMessage $message): void
@@ -170,8 +224,9 @@ class AuthManager implements WithRealmManagerInterface
     protected function getAuthenticators(Session $session, HelloMessage $helloMessage): array
     {
         $authenticators = [];
+        $authMethods = $helloMessage->getDetails()->authmethods ?? ['anonymous'];
         foreach ($this->authenticators as $authenticator) {
-            if ($authenticator->canAuthenticate($session, $helloMessage, $helloMessage->getAuthMethods())) {
+            if ($authenticator->canAuthenticate($session, $helloMessage, $authMethods)) {
                 $authenticators[] = $authenticator;
             }
         }

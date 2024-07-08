@@ -9,6 +9,7 @@ use Octamp\Server\Server;
 use Octamp\Wamp\Adapter\AdapterInterface;
 use Octamp\Wamp\Auth\AuthManager;
 use Octamp\Wamp\Config\TransportProviderConfig;
+use Octamp\Wamp\Connection\DummyConnection;
 use Octamp\Wamp\Helper\IDHelper;
 use Octamp\Wamp\Helper\SerializerHelper;
 use Octamp\Wamp\Peers\Router;
@@ -25,6 +26,8 @@ use Octamp\Wamp\Transport\TransportProviderInterface;
 use OpenSwoole\Http\Request;
 use OpenSwoole\Http\Response;
 use OpenSwoole\WebSocket\Frame;
+use Symfony\Component\EventDispatcher\EventDispatcher;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 class Wamp
 {
@@ -38,9 +41,12 @@ class Wamp
 
     protected string $serverId;
 
+    protected EventDispatcherInterface $eventDispatcher;
+
     public function __construct(private readonly TransportProviderConfig $config, private readonly AdapterInterface $adapter)
     {
-        $this->authManager = new AuthManager($this->config->auth);
+        $this->eventDispatcher = new EventDispatcher();
+        $this->authManager = new AuthManager($this->config->auth, $this->eventDispatcher);
         $this->realmManager = new RealmManager($this->authManager);
         $this->serverId = uniqid('');
         $this->init();
@@ -72,7 +78,23 @@ class Wamp
 
             $router->addTransportProviders($this->transportProviders);
 
+            $connection = DummyConnection::createFromArray([
+                'server' => $this->serverId,
+                'request' => [
+                    'fd' => 0,
+                    'header' => [],
+                    'server' => [],
+                    'cookie' => [],
+                    'get' => [],
+                    'files' => [],
+                    'post' => [],
+                    'tmpfiles' => [],
+                ]
+            ], $server);
+            $server->getConnectionStorage()->save($connection);
             $realm = $this->realmManager->createRealm('realm1', $router);
+            $realm->setConnection($connection);
+            $realm->getMetaSession();
 
             $this->realmManager->addRealm($realm);
         });

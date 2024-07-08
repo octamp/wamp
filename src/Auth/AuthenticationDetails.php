@@ -20,6 +20,8 @@ class AuthenticationDetails implements \JsonSerializable
 
     private ?AuthenticatorInterface $authenticator;
 
+    private ?object $verificationDetails;
+
     function __construct()
     {
         $this->authId = null;
@@ -120,7 +122,7 @@ class AuthenticationDetails implements \JsonSerializable
         }
     }
 
-    public function getAuthExtra(): object
+    public function getAuthExtra(): ?object
     {
         return $this->authExtra;
     }
@@ -145,6 +147,16 @@ class AuthenticationDetails implements \JsonSerializable
         $this->authenticator = $authenticator;
     }
 
+    public function setVerificationDetails(array|object $details): void
+    {
+        $this->verificationDetails = (object) $details;
+    }
+
+    public function getVerificationDetails(): ?object
+    {
+        return $this->verificationDetails;
+    }
+
     public function getAuthenticator(): ?AuthenticatorInterface
     {
         return $this->authenticator;
@@ -156,6 +168,7 @@ class AuthenticationDetails implements \JsonSerializable
             'authid' => $this->getAuthId(),
             'authrole' => $this->getAuthRole(),
             'authmethod' => $this->authMethod,
+            'authroles' => $this->getAuthRoles(),
         ];
 
         if ($this->getAuthExtra() !== null) {
