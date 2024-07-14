@@ -24,8 +24,8 @@ class SerializerHelper
     public static function supportedProtocols(): array
     {
         return [
-            'wamp.2.msgpack',
             'wamp.2.json',
+            'wamp.2.msgpack',
         ];
     }
 
