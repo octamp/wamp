@@ -25,7 +25,7 @@ class SerializerHelper
     {
         return [
             'wamp.2.json',
-//            'wamp.2.msgpack',
+            'wamp.2.msgpack',
         ];
     }
 
