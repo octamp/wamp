@@ -115,7 +115,23 @@ That will now run the server
 
 ## Advance Profile Feature Support
 
-The current version does not support Advance Profile Features
+### Authentication
+
+| Feature    | Static  | Dynamic |
+|------------|---------|---------|
+| Anonymous  | &check; | &check; |
+| Ticket     | &check; | &check; |
+| Wamp-CRA   | &cross; | &cross; |
+| Wamp-SCRA  | &cross; | &cross; |
+| Cryptosign | &cross; | &cross; |
+| TLS        | &cross; | &cross; |
+| Cookie     | &cross; | &cross; |
+
+**Additional Authentication**
+
+- [ ] Add Feature
+- [ ] Add checking of role
+
 
 ## TODOs
 
@@ -123,25 +139,3 @@ The current version does not support Advance Profile Features
 - [ ] Implement Advance Profile
 - [ ] Remove Dependencies from Thruway Common
 - [ ] Add OpenSwoole Table Adapter as Data Provider
-
-### Authentication
-
-- [x] Static Anonymous
-- [ ] Function Anonymous
-- [ ] Dynamic Anonymous
-- [x] Static Ticket
-- [ ] Function Ticket
-- [ ] Dynamic Ticket
-- [ ] Static WAMP-CRA
-- [ ] Function WAMP-CRA
-- [ ] Dynamic WAMP-CRA
-- [ ] Static WAMP-SCRA
-- [ ] Function WAMP-SCRA
-- [ ] Dynamic WAMP-SCRA
-- [ ] Static Cryptosign
-- [ ] Function Cryptosign
-- [ ] Dynamic Cryptosign
-- [ ] TLS
-- [ ] Cookie
-- [ ] Add Feature
-- [ ] Add checking of role

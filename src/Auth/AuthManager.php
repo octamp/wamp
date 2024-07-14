@@ -167,6 +167,9 @@ class AuthManager implements WithRealmManagerInterface
                 }
             });
             $result = $restPromise->wait();
+
+            unset($promise);
+            unset($restPromise);
         } while ($result);
     }
 

@@ -88,11 +88,13 @@ class TicketDynamicAuthenticator extends AbstractAuthenticator implements WithRe
                                 'error_details' => $result['error_details'] ?? null,
                             ]);
                         } else {
+                            $authDetails = [];
+                            if (isset($result['authid'])) {
+                                $authDetails['authid'] = $result['authid'];
+                            }
                             $resolve([
                                 'status' => AuthManager::STATUS_CHALLENGE,
-                                'auth_details' => [
-                                    'authid' => $authId,
-                                ],
+                                'auth_details' => $authDetails,
                                 'verify_details' => $result,
                                 'challenge_details' => [
                                     'challenge_method' => $this->getMethod(),
@@ -123,6 +125,43 @@ class TicketDynamicAuthenticator extends AbstractAuthenticator implements WithRe
 
     public function processAuthenticate(Session $session, AuthenticateMessage $message): PromiseInterface
     {
+        return new Promise(function (callable $resolve) use ($session, $message) : void {
+            $verificationDetails = $session->getAuthenticationDetails()->getVerificationDetails();
+            if ($verificationDetails === null) {
+                $resolve([
+                    'status' => AuthManager::STATUS_FAILURE,
+                    'error_uri' => 'wamp.error.authentication_denied',
+                    'error_details' => ['message' => 'Invalid ticket / signature'],
+                ]);
+                return;
+            }
+            $ticket = $verificationDetails->ticket ?? null;
+            if ($ticket !== $message->getSignature()) {
+                $resolve([
+                    'status' => AuthManager::STATUS_FAILURE,
+                    'error_uri' => 'wamp.error.authentication_denied',
+                    'error_details' => ['message' => 'Invalid ticket / signature'],
+                ]);
+                return;
+            }
+
+            $authDetails = [
+                'authid' => $verificationDetails->authid,
+            ];
+            if ($verificationDetails->role) {
+                $authDetails['authrole'] = $verificationDetails->role;
+            }
+            if ($verificationDetails->authextra) {
+                $authDetails['authextra'] = $verificationDetails->extra;
+            }
+            if ($verificationDetails->role) {
+                $authDetails['authprovider'] = $verificationDetails->authprovider;
+            }
+            $resolve([
+                'status' => AuthManager::STATUS_SUCCESS,
+                'auth_details' => $authDetails,
+            ]);
+        });
     }
 
     public function getMethod(): string

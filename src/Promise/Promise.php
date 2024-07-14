@@ -38,7 +38,7 @@ class Promise implements PromiseInterface
         }
     }
 
-    public function then(?callable $onFulfilled = null, ?callable $onRejected = null): PromiseInterface
+    public function then(?callable $onFulfilled = null, ?callable $onRejected = null): static
     {
         return self::create(function (callable $resolve, callable $reject) use ($onFulfilled, $onRejected) {
             while ($this->isPending()) {
@@ -59,7 +59,7 @@ class Promise implements PromiseInterface
         });
     }
 
-    final public function catch(callable $onRejected): PromiseInterface
+    final public function catch(callable $onRejected): static
     {
         return $this->then(null, $onRejected);
     }
@@ -73,7 +73,7 @@ class Promise implements PromiseInterface
         return $this->result;
     }
 
-    final public static function create(callable $promise): PromiseInterface
+    final public static function create(callable $promise): static
     {
         return new static($promise);
     }
