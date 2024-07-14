@@ -2,6 +2,7 @@
 
 namespace Octamp\Wamp\Session;
 
+use Octamp\Server\Connection\Connection;
 use Octamp\Server\Connection\ConnectionStorage;
 use Octamp\Wamp\Helper\SerializerHelper;
 use Octamp\Wamp\Realm\RealmManager;
@@ -36,9 +37,12 @@ class SessionStorage
         return $session;
     }
 
-    public function createDummy(): Session
+    public function createDummy(Connection $connection): Session
     {
-        return new Session(new DummyTransport(), $this->serverId, $this->adapter);
+        $transport = new OctampTransport($connection);
+        $transport->setSerializer(new JsonSerializer());
+
+        return $this->createSession($transport, $this->serverId);
     }
 
     public function createFromArray(array $data): ?Session

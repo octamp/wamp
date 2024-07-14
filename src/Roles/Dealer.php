@@ -198,7 +198,7 @@ class Dealer extends AbstractRole implements RoleInterface
     protected function processInvocationError(Session $session, ErrorMessage $message)
     {
         $key = Registration::generateKeyForInvocation('*', $session->getSessionId(), '*', $message->getRequestId());
-        $details = $this->adapter->get($key);
+        $details = $this->adapter->findOne($key);
         if ($details === null) {
             $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($message, 'wamp.error.no_such_procedure'));
             return;

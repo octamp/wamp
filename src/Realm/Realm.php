@@ -2,24 +2,26 @@
 
 namespace Octamp\Wamp\Realm;
 
+use Octamp\Server\Connection\Connection;
+use Octamp\Wamp\Auth\AuthManager;
 use Octamp\Wamp\Event\EventInterface;
 use Octamp\Wamp\Event\LeaveRealmEvent;
 use Octamp\Wamp\Peers\Router;
 use Octamp\Wamp\Session\Session;
 use Octamp\Wamp\Session\SessionStorage;
-use Octamp\Wamp\Transport\DummyTransport;
-use Thruway\Authentication\AuthenticationDetails;
 use Thruway\Common\Utils;
+use Thruway\Message\AuthenticateMessage;
 use Thruway\Message\HelloMessage;
 use Thruway\Message\Message;
 use Thruway\Message\PublishMessage;
-use Thruway\Message\WelcomeMessage;
 
 class Realm
 {
     private ?Session $metaSession = null;
 
-    public function __construct(public readonly string $name, protected SessionStorage $sessionStorage, protected Router $router)
+    private ?Connection $connection = null;
+
+    public function __construct(public readonly string $name, protected SessionStorage $sessionStorage, protected Router $router, protected AuthManager $authManager)
     {
     }
 
@@ -43,13 +45,22 @@ class Realm
     public function onHelloMessage(Session $session, HelloMessage $message): void
     {
         if ($session->isAuthenticated()) {
+            // TODO log
             return;
         }
-        $session->setAuthenticationDetails(AuthenticationDetails::createAnonymous());
-        $session->setAuthenticated(true);
 
-        $welcome = new WelcomeMessage($session->getId(), $message->getDetails());
-        $session->sendMessage($welcome);
+        $this->authManager->processHelloMessage($session, $message);
+        $this->sessionStorage->saveSession($session);
+    }
+
+    public function onAuthenticateMessage(Session $session, AuthenticateMessage $message): void
+    {
+        if ($session->isAuthenticated()) {
+            // TODO log
+            return;
+        }
+
+        $this->authManager->processAuthenticateMessage($session, $message);
         $this->sessionStorage->saveSession($session);
     }
 
@@ -64,16 +75,28 @@ class Realm
 
     public function publishMeta(string $topicName, array $arguments, ?object $argumentsKw = null, ?object $options = null): void
     {
-        if ($this->metaSession === null) {
-            $this->metaSession = $this->sessionStorage->createDummy();
-        }
-
-        $this->handle($this->metaSession, new PublishMessage(
+        $this->handle($this->getMetaSession(), new PublishMessage(
             Utils::getUniqueId(),
             $options,
             $topicName,
             $arguments,
             $argumentsKw
         ));
+    }
+
+    public function getMetaSession(): Session
+    {
+        if ($this->metaSession === null) {
+            $this->metaSession = $this->sessionStorage->createDummy($this->connection);
+            $this->metaSession->setTrusted(true);
+            $this->addSession($this->metaSession);
+        }
+
+        return $this->metaSession;
+    }
+
+    public function setConnection(Connection $connection): void
+    {
+        $this->connection = $connection;
     }
 }

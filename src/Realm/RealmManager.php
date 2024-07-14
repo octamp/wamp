@@ -3,6 +3,7 @@
 namespace Octamp\Wamp\Realm;
 
 use Octamp\Wamp\Adapter\AdapterInterface;
+use Octamp\Wamp\Auth\AuthManager;
 use Octamp\Wamp\Peers\Router;
 use Octamp\Wamp\Session\Session;
 use Octamp\Wamp\Session\SessionStorage;
@@ -17,8 +18,9 @@ class RealmManager
     protected ?SessionStorage $sessionStorage = null;
     protected ?AdapterInterface $adapter = null;
 
-    public function __construct()
+    public function __construct(protected AuthManager $authManager)
     {
+        $this->authManager->setRealmManager($this);
     }
 
     public function init(SessionStorage $sessionStorage, AdapterInterface $adapter): void
@@ -29,7 +31,7 @@ class RealmManager
 
     public function createRealm(string $name, Router $router): Realm
     {
-        return new Realm($name, $this->sessionStorage, $router);
+        return new Realm($name, $this->sessionStorage, $router, $this->authManager);
     }
 
     public function addRealm(Realm $realm): void
@@ -77,12 +79,11 @@ class RealmManager
         }
 
         if ($session->getRealm() === null) {
-            $session->abort((object) ['message' => 'the real does not exists'], 'wamp.error.no_such_realm');
+            $session->abort((object) ['message' => 'the realm does not exists'], 'wamp.error.no_such_realm');
             return;
         }
 
-        $realm = $session->getRealm();
-        $realm->handle($session, $message);
+        $session->getRealm()->handle($session, $message);
     }
 
     public function onHelloMessage(Session $session, HelloMessage $message): void

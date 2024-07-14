@@ -115,7 +115,23 @@ That will now run the server
 
 ## Advance Profile Feature Support
 
-The current version does not support Advance Profile Features
+### Authentication
+
+| Feature    | Static  | Dynamic |
+|------------|---------|---------|
+| Anonymous  | &check; | &check; |
+| Ticket     | &check; | &check; |
+| Wamp-CRA   | &cross; | &cross; |
+| Wamp-SCRA  | &cross; | &cross; |
+| Cryptosign | &cross; | &cross; |
+| TLS        | &cross; | &cross; |
+| Cookie     | &cross; | &cross; |
+
+**Additional Authentication**
+
+- [ ] Add Feature
+- [ ] Add checking of role
+
 
 ## TODOs
 

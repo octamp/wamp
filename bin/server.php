@@ -5,10 +5,10 @@ use Octamp\Wamp\Config\TransportProviderConfig;
 use Octamp\Wamp\Wamp;
 use Symfony\Component\Dotenv\Dotenv;
 
-require_once __DIR__ . '/../vendor/autoload.php';
+$loader = require_once __DIR__ . '/../vendor/autoload.php';
 
 $env = new Dotenv();
-$env->loadEnv(dirname(__DIR__ . '') . '/.env');
+$env->loadEnv(dirname(__DIR__) . '/.env');
 
 
 $redisOptions = [
@@ -32,6 +32,20 @@ $transportConfig = new TransportProviderConfig(
     host: $_ENV['SERVER_HOST'],
     port: $_ENV['SERVER_PORT'],
     workerNum: $_ENV['SERVER_WORKERNUM'],
+    auth: [
+        [
+            'method' => 'ticket',
+            'type' => 'dynamic',
+            'authenticator' => 'testing',
+            'authenticator-realm' => 'realm1',
+            'realms' => ['realm1']
+        ],
+        [
+            'method' => 'anonymous',
+            'type' => 'static',
+            'role' => 'auth'
+        ]
+    ],
 );
 $wamp = new Wamp($transportConfig, $adapter);
 
