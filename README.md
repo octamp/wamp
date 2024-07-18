@@ -132,6 +132,37 @@ That will now run the server
 - [ ] Add Feature
 - [ ] Add checking of role
 
+## RPC Features
+
+| Feature                                                           | Status  |
+|-------------------------------------------------------------------|---------|
+| [Progressive Call Results](#rpc-progressive-call-results)         | &cross; |
+| [Progressive Call Invocations](#rpc-progressive-call-invocations) | &cross; |
+| [Call Timeout](#rpc-call-timeout)                                 | &cross; |
+| [Call Canceling](#rpc-call-canceling)                             | &cross; |
+| [Caller Identification](#rpc-call-identification)                 | &cross; |
+| [Call Trustlevels](#rpc-call-trust-levels)                        | &cross; |
+| [Registration Meta API](#rpc-reg-metapi)                          | &cross; |
+| [Pattern-based Registration](#rpc-pattern-reg)                    | &cross; |
+| [Shared Registration](#rpc-shared-registration)                   | &cross; |
+| [Sharded Registration](##rpc-sharded-registration)                | &cross; |
+| [Registration Revocation](#rpc-registration-revocation)           | &cross; |
+| [(Interface) Procedure Reflection](#interface-reflection)         | &cross; |
+
+
+**Advanced PubSub Features**
+
+| Feature                                                   | Status  |
+|-----------------------------------------------------------|---------|
+| [Subscriber Blackwhite Listing](#pubsub-bw-listing)       | &cross; |
+| [Publisher Exclusion](#pubsub-pub-exclusion)              | &cross; |
+| [Publisher Identification](#pubsub-pub-identification)    | &cross; |
+| [Publication Trustlevels](#pubsub-pub-trustlevels)        | &cross; |
+| [Subscription Meta API](#pubsub-sub-metapi)               | &cross; |
+| [Pattern-based Subscription](#pattern-based-subscription) | &cross; |
+| [Sharded Subscription](#pubsub-sharded-subscription)      | &cross; |
+| [Event History](#pubsub-event-history)                    | &cross; |
+| [(Interface) Topic Reflection](#interface-reflection)     | &cross; |
 
 ## TODOs
 
