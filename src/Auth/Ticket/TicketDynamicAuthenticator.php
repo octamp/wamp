@@ -2,14 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Octamp\Wamp\Auth;
+namespace Octamp\Wamp\Auth\Ticket;
 
+use Octamp\Wamp\Auth\AbstractDynamicAuthenticator;
 use Octamp\Wamp\Auth\Response\AuthErrorResponse;
 use Octamp\Wamp\Auth\Response\AuthSuccessResponse;
 use Octamp\Wamp\Auth\Response\HelloErrorResponse;
 use Octamp\Wamp\Auth\Response\HelloSuccessResponse;
-use Octamp\Wamp\Promise\PromiseInterrupted;
 use Octamp\Wamp\Promise\PromiseErrorException;
+use Octamp\Wamp\Promise\PromiseInterrupted;
 use Octamp\Wamp\Session\Session;
 use Thruway\Message\AuthenticateMessage;
 use Thruway\Message\HelloMessage;

@@ -48,7 +48,7 @@ class AuthenticationDetails implements \JsonSerializable
         $this->challenge = $challenge;
     }
 
-    public function getChallenge(): ?array
+    public function getChallenge(): mixed
     {
         return $this->challenge;
     }

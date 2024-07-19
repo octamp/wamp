@@ -11,6 +11,7 @@ class Promise implements PromiseInterface
     const STATE_REJECTED  = -1;
 
     protected mixed $result;
+
     protected int $state = self::STATE_PENDING;
 
     /**

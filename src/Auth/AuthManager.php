@@ -4,9 +4,14 @@ declare(strict_types=1);
 
 namespace Octamp\Wamp\Auth;
 
+use Octamp\Wamp\Auth\Anonymous\AnonymousDynamicAuthenticator;
+use Octamp\Wamp\Auth\Anonymous\AnonymousStaticAuthenticator;
 use Octamp\Wamp\Auth\Response\HelloErrorResponse;
 use Octamp\Wamp\Auth\Response\HelloSuccessResponse;
-use Octamp\Wamp\Promise\PromiseErrorException;
+use Octamp\Wamp\Auth\Ticket\TicketDynamicAuthenticator;
+use Octamp\Wamp\Auth\Ticket\TicketStaticAuthenticator;
+use Octamp\Wamp\Auth\WampCra\WampCraDynamicAuthenticator;
+use Octamp\Wamp\Auth\WampCra\WampCraStaticAuthenticator;
 use Octamp\Wamp\Realm\RealmManager;
 use Octamp\Wamp\Session\Session;
 use OpenSwoole\Coroutine;
@@ -18,6 +23,21 @@ use Thruway\Message\WelcomeMessage;
 
 class AuthManager implements WithRealmManagerInterface
 {
+    protected static array $authenticatorClasses = [
+        'anonymous' => [
+            'static' => AnonymousStaticAuthenticator::class,
+            'dynamic' => AnonymousDynamicAuthenticator::class,
+        ],
+        'ticket' => [
+            'static' => TicketStaticAuthenticator::class,
+            'dynamic' => TicketDynamicAuthenticator::class,
+        ],
+        'wampcra' => [
+            'static' => WampCraStaticAuthenticator::class,
+            'dynamic' => WampCraDynamicAuthenticator::class,
+        ],
+    ];
+
     public const STATUS_CHALLENGE = 1;
     public const STATUS_NO_CHALLENGE = 2;
     public const STATUS_SUCCESS = 3;
@@ -56,12 +76,13 @@ class AuthManager implements WithRealmManagerInterface
 
     public function generateAuthenticator(array $data): ?AuthenticatorInterface
     {
-        $class = '\\Octamp\\Wamp\\Auth\\' . ucwords($data['method']) . ucwords($data['type']) . 'Authenticator';
-        if (!class_exists($class)) {
+        $className = self::$authenticatorClasses[$data['method']][$data['type']];
+
+        if (!class_exists($className)) {
             throw new \Exception($data['method'] . ' with type "' . $data['type'] . '" is not known authenticator');
         }
 
-        return new $class($data);
+        return new $className($data);
     }
 
     public function processHelloMessage(Session $session, HelloMessage $message): void
@@ -114,12 +135,15 @@ class AuthManager implements WithRealmManagerInterface
             if (isset($authDetailsRaw->authextra)) {
                 $authDetails->setAuthExtra($authDetailsRaw->authextra);
             }
+            if (isset($authDetailsRaw->authprovider)) {
+                $authDetails->setAuthProvider($authDetailsRaw->authprovider);
+            }
             $session->setAuthenticationDetails($authDetails);
 
             if ($status === self::STATUS_CHALLENGE) {
                 $challengeDetails = $res->challengeDetails;
                 $authMethod = $res->challengeMethod;
-                $challenge = $challengeDetails?->challenge ?? [];
+                $challenge = $challengeDetails?->challenge ?? '{}';
 
                 $session->getAuthenticationDetails()->setChallengeDetails($challengeDetails ?: []);
                 $session->getAuthenticationDetails()->setChallenge($challenge);

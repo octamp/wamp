@@ -1,17 +1,15 @@
 <?php
 
-namespace Octamp\Wamp\Auth;
+namespace Octamp\Wamp\Auth\Ticket;
 
+use Octamp\Wamp\Auth\AbstractAuthenticator;
 use Octamp\Wamp\Auth\Response\AuthErrorResponse;
 use Octamp\Wamp\Auth\Response\AuthSuccessResponse;
 use Octamp\Wamp\Auth\Response\HelloErrorResponse;
 use Octamp\Wamp\Auth\Response\HelloSuccessResponse;
-use Octamp\Wamp\Promise\Promise;
-use Octamp\Wamp\Promise\PromiseInterface;
 use Octamp\Wamp\Session\Session;
 use OpenSwoole\Table;
 use Thruway\Message\AuthenticateMessage;
-use Thruway\Message\ChallengeMessage;
 use Thruway\Message\HelloMessage;
 
 class TicketStaticAuthenticator extends AbstractAuthenticator
@@ -20,8 +18,6 @@ class TicketStaticAuthenticator extends AbstractAuthenticator
 
     protected function init(): void
     {
-        parent::__construct($this->config);
-
         $principals = $this->config['principals'] ?? [];
 
         $maxAuthIdLen = max(array_column($principals, 'authid'));

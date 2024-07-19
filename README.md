@@ -121,7 +121,7 @@ That will now run the server
 |------------|---------|---------|
 | Anonymous  | &check; | &check; |
 | Ticket     | &check; | &check; |
-| Wamp-CRA   | &cross; | &cross; |
+| Wamp-CRA   | &check; | &check; |
 | Wamp-SCRA  | &cross; | &cross; |
 | Cryptosign | &cross; | &cross; |
 | TLS        | &cross; | &cross; |

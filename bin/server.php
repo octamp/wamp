@@ -41,9 +41,18 @@ $transportConfig = new TransportProviderConfig(
             'realms' => ['realm1']
         ],
         [
-            'method' => 'anonymous',
+            'method' => 'wampcra',
             'type' => 'static',
-            'role' => 'auth'
+            'users' => [
+                [
+                    'authid' => 'auth',
+                    'secret' => 'qa2/QVmmjSx1JJuyH5EI2gMDQf+ARnfwMcLOpUfln74=',
+                    'role' => 'auth',
+                    'salt' => 'salt1',
+                    'keylen' => 32,
+                    'iterations' => 1000
+                ],
+            ],
         ]
     ],
 );

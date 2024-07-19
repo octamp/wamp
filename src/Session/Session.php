@@ -21,6 +21,7 @@ use Thruway\Message\Message;
 class Session
 {
     protected ?HelloMessage $helloMessage = null;
+
     protected ?Realm $realm = null;
 
     protected bool $trusted = false;
