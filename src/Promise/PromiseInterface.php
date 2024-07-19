@@ -6,7 +6,11 @@ interface PromiseInterface
 {
     public function then(?callable $onFulfilled = null, ?callable $onRejected = null): static;
 
-    public function wait(): mixed;
+    /**
+     * @return mixed
+     * @throws PromiseErrorException
+     */
+    public function wait(int $timeout = -1): mixed;
 
     /**
      * This method return a promise with rejected case only
@@ -23,4 +27,8 @@ interface PromiseInterface
      * @return PromiseInterface
      */
     public static function create(callable $promise): static;
+
+    public static function resolve(mixed $result): PromiseInterface;
+
+    public static function reject(mixed $result): PromiseInterface;
 }

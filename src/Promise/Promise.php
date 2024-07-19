@@ -13,6 +13,11 @@ class Promise implements PromiseInterface
     protected mixed $result;
     protected int $state = self::STATE_PENDING;
 
+    /**
+     * @var Coroutine\Channel[]
+     */
+    protected array $channels = [];
+
     public function __construct(callable $executor)
     {
         Coroutine::create(function (callable $executor, callable $resolve, callable $reject) {
@@ -28,35 +33,51 @@ class Promise implements PromiseInterface
     {
         $this->setResult($value);
         $this->setState(self::STATE_FULFILLED);
+
+        foreach ($this->channels as $channel) {
+            $channel->push($this->result);
+        }
     }
 
     public function processReject(mixed $value = null): void
     {
-        if ($this->isPending()) {
-            $this->setResult($value);
-            $this->setState(self::STATE_REJECTED);
+        $this->setResult($value);
+        $this->setState(self::STATE_REJECTED);
+
+        foreach ($this->channels as $channel) {
+            $channel->push($this->result);
         }
     }
 
     public function then(?callable $onFulfilled = null, ?callable $onRejected = null): static
     {
-        return self::create(function (callable $resolve, callable $reject) use ($onFulfilled, $onRejected) {
-            while ($this->isPending()) {
-                // @codeCoverageIgnoreStart
-                Coroutine::usleep(1);
-                // @codeCoverageIgnoreEnd
-            }
-            $callable = $this->isFulfilled() ? $onFulfilled : $onRejected;
-            if (!is_callable($callable)) {
-                $resolve($this->result);
-                return;
-            }
+        $executor = function (callable $resolve, callable $reject) use ($onFulfilled, $onRejected) {
             try {
-                $resolve($callable($this->result));
+                $result = $this->wait();
+                $callable = $this->isFulfilled() ? $onFulfilled : $onRejected;
+                if (!is_callable($callable)) {
+                    $resolve($result);
+                    return;
+                }
+                $resolve($callable($result));
+            } catch (PromiseErrorException $exception) {
+                $callable = $this->isFulfilled() ? $onFulfilled : $onRejected;
+                if (is_callable($callable)) {
+                    $resolve($callable($exception->getData()));
+                    return;
+                }
+                $reject($exception->getData());
             } catch (\Throwable $error) {
+                $callable = $this->isFulfilled() ? $onFulfilled : $onRejected;
+                if (is_callable($callable)) {
+                    $resolve($callable($error));
+                    return;
+                }
                 $reject($error);
             }
-        });
+        };
+
+        return self::create($executor);
     }
 
     final public function catch(callable $onRejected): static
@@ -64,13 +85,24 @@ class Promise implements PromiseInterface
         return $this->then(null, $onRejected);
     }
 
-    final public function wait(): mixed
+    final public function wait(int $timeout = -1): mixed
     {
-        while ($this->isPending()) {
-            Coroutine::usleep(1);
+        if (!$this->isPending()) {
+            return $this->result;
         }
 
-        return $this->result;
+        $channel = new Coroutine\Channel(1);
+        $this->channels[$channel->getId()] = $channel;
+
+        $result = $channel->pop($timeout);
+        $channel->close();
+        unset($this->channels[$channel->getId()]);
+
+        if ($this->isRejected()) {
+            throw new PromiseErrorException($result);
+        }
+
+        return $result;
     }
 
     final public static function create(callable $promise): static
@@ -93,21 +125,53 @@ class Promise implements PromiseInterface
         return $this->state == self::STATE_FULFILLED;
     }
 
+    final protected function isRejected(): bool
+    {
+        return $this->state == self::STATE_REJECTED;
+    }
+
     private function setResult(mixed $value): void
     {
         if ($value instanceof PromiseInterface) {
-            $resolved = false;
-            $callable = function ($value) use (&$resolved) {
-                $this->setResult($value);
-                $resolved = true;
-            };
-            $value->then($callable, $callable);
-            // resolve async locking error
-            while (!$resolved) {
-                Coroutine::usleep(1);
+            try {
+                $result = $value->wait();
+                $this->setResult($result);
+            } catch (PromiseErrorException $exception) {
+                $this->setResult($exception->getData());
+                $this->setState(self::STATE_REJECTED);
             }
         } else {
             $this->result = $value;
         }
+    }
+
+    public function __destruct()
+    {
+        $this->processReject(new PromiseInterrupted());
+        $this->clearChannels();
+        // use cancel
+    }
+
+    private function clearChannels(): void
+    {
+        $keys = array_keys($this->channels);
+        foreach ($keys as $key) {
+            $this->channels[$key]->close();
+            unset($this->channels[$key]);
+        }
+    }
+
+    public static function resolve(mixed $result): PromiseInterface
+    {
+        return new Promise(function ($resolve, $reject) use ($result) {
+            $resolve($result);
+        });
+    }
+
+    public static function reject(mixed $result): PromiseInterface
+    {
+        return new Promise(function ($resolve, $reject) use ($result) {
+            $reject($result);
+        });
     }
 }
