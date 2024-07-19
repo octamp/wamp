@@ -9,6 +9,7 @@ use Octamp\Wamp\Promise\PromiseInterface;
 use Octamp\Wamp\Realm\RealmManager;
 use Octamp\Wamp\Session\Event\MessageEvent;
 use Thruway\Message\CallMessage;
+use Thruway\Message\ErrorMessage;
 use Thruway\Message\HelloMessage;
 use Thruway\Message\Message;
 use Thruway\Message\ResultMessage;
@@ -61,7 +62,7 @@ abstract class AbstractDynamicAuthenticator extends AbstractAuthenticator implem
                     }
 
                     $result = $data[0];
-                    $success = $result['status'] ?? true;
+                    $success = $result->status ?? true;
 
                     if (!$success) {
                         $deferred->reject($result);
@@ -77,7 +78,7 @@ abstract class AbstractDynamicAuthenticator extends AbstractAuthenticator implem
                     /** @var ErrorMessage $message */
                     $message = $event->message;
 
-                    $deferred->resolve([
+                    $deferred->reject([
                         'error_uri' => $message->getErrorURI(),
                         'error_details' => $message->getDetails(),
                     ]);

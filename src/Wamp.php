@@ -16,6 +16,7 @@ use Octamp\Wamp\Peers\Router;
 use Octamp\Wamp\Realm\RealmManager;
 use Octamp\Wamp\Roles\Broker;
 use Octamp\Wamp\Roles\Dealer;
+use Octamp\Wamp\Serializer\DeserializationException;
 use Octamp\Wamp\Serializer\JsonSerializer;
 use Octamp\Wamp\Serializer\MessagePackSerializer;
 use Octamp\Wamp\Serializer\WampMessageSerializerInterface;
@@ -176,8 +177,14 @@ class Wamp
             if ($frame->opcode === \OpenSwoole\WebSocket\Server::WEBSOCKET_OPCODE_PONG) {
                 $session->getTransport()->onPong($frame);
             } elseif ($frame->opcode === \OpenSwoole\WebSocket\Server::WEBSOCKET_OPCODE_TEXT || $frame->opcode === \OpenSwoole\WebSocket\Server::WEBSOCKET_OPCODE_BINARY) {
-                $message = $session->getTransport()->getSerializer()->deserialize($frame->data);
-                $this->realmManager->dispatch($session, $message);
+                try {
+                    $message = $session->getTransport()->getSerializer()->deserialize($frame->data);
+                    $this->realmManager->dispatch($session, $message);
+                } catch (DeserializationException $deserializationException) {
+                    if (!$session->isAuthenticated()) {
+                        $session->abort([], 'wamp.error.unknown');
+                    }
+                }
             }
         });
     }

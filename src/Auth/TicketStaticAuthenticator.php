@@ -2,6 +2,10 @@
 
 namespace Octamp\Wamp\Auth;
 
+use Octamp\Wamp\Auth\Response\AuthErrorResponse;
+use Octamp\Wamp\Auth\Response\AuthSuccessResponse;
+use Octamp\Wamp\Auth\Response\HelloErrorResponse;
+use Octamp\Wamp\Auth\Response\HelloSuccessResponse;
 use Octamp\Wamp\Promise\Promise;
 use Octamp\Wamp\Promise\PromiseInterface;
 use Octamp\Wamp\Session\Session;
@@ -35,83 +39,40 @@ class TicketStaticAuthenticator extends AbstractAuthenticator
         }
     }
 
-    public function processHello(Session $session, HelloMessage $message): PromiseInterface
+    public function processHello(Session $session, HelloMessage $message): HelloSuccessResponse|HelloErrorResponse
     {
-        return new Promise(function (callable $resolve) use ($message) : void{
-            $helloDetails = $message->getDetails();
-            $authId = $helloDetails->authid ?? null;
-            if ($authId === null) {
-                $resolve([
-                    'status' => AuthManager::STATUS_FAILURE,
-                    'error_uri' => 'wamp.error.authentication_required',
-                    'error_details' => ['message' => 'authid required'],
-                ]);
-                return;
-            }
+        $helloDetails = $message->getDetails();
+        $authId = $helloDetails->authid ?? null;
+        if ($authId === null) {
+            return $this->generateFailureResponse('wamp.error.authentication_required', ['message' => 'authid required']);
+        }
 
-            if (!$this->table->exists($authId)) {
-                $resolve([
-                    'status' => AuthManager::STATUS_FAILURE,
-                    'error_uri' => 'wamp.error.no_such_principal',
-                    'error_details' => ['message' => 'authid "' . $authId . '" does not exists'],
-                ]);
+        if (!$this->table->exists($authId)) {
+            return $this->generateFailureResponse('wamp.error.no_such_principal', ['message' => 'authid "' . $authId . '" does not exists']);
+        }
 
-                return;
-            }
-
-
-            $resolve([
-                'status' => AuthManager::STATUS_CHALLENGE,
-                'auth_details' => [
-                    'authid' => $authId,
-                ],
-                'challenge_details' => [
-                    'challenge_method' => $this->getMethod(),
-                ],
-            ]);
-        });
+        return $this->generateChallengeResponse(['authid' => $authId]);
     }
 
-    public function processAuthenticate(Session $session, AuthenticateMessage $message): PromiseInterface
+    public function processAuthenticate(Session $session, AuthenticateMessage $message): AuthSuccessResponse|AuthErrorResponse
     {
-        return new Promise(function (callable $resolve) use ($session, $message) : void {
-            $authId = $session->getAuthenticationDetails()->getAuthId();
-            if ($authId === null) {
-                $resolve([
-                    'status' => AuthManager::STATUS_FAILURE,
-                    'error_uri' => 'wamp.error.authentication_required',
-                    'error_details' => ['message' => 'authid required'],
-                ]);
-                return;
-            }
+        $authId = $session->getAuthenticationDetails()->getAuthId();
+        if ($authId === null) {
+            return $this->generatedErrorResponse('wamp.error.authentication_required', ['message' => 'authid required']);
+        }
+        if (!$this->table->exists($authId)) {
+            return $this->generatedErrorResponse('wamp.error.no_such_principal', ['message' => 'authid "' . $authId . '" does not exists']);
+        }
 
-            if (!$this->table->exists($authId)) {
-                $resolve([
-                    'status' => AuthManager::STATUS_FAILURE,
-                    'error_uri' => 'wamp.error.no_such_principal',
-                    'error_details' => ['message' => 'authid "' . $authId . '" does not exists'],
-                ]);
-                return;
-            }
+        $principal = $this->table->get($authId);
+        if ($principal['ticket'] !== $message->getSignature()) {
+            return $this->generatedErrorResponse('wamp.error.authentication_denied', ['message' => 'Invalid ticket / signature']);
+        }
 
-            $principal = $this->table->get($authId);
-            if ($principal['ticket'] !== $message->getSignature()) {
-                $resolve([
-                    'status' => AuthManager::STATUS_FAILURE,
-                    'error_uri' => 'wamp.error.authentication_denied',
-                    'error_details' => ['message' => 'Invalid ticket / signature'],
-                ]);
-                return;
-            }
-
-            $resolve([
-                'status' => AuthManager::STATUS_SUCCESS,
-                'auth_details' => [
-                    'authid' => $authId,
-                    'authrole' => $principal['role'],
-                ],
-            ]);
-        });
+        return $this->generateSuccessResponse([
+            'authid' => $authId,
+            'authrole' => $principal['role'],
+        ]);
     }
 
     public function getMethod(): string

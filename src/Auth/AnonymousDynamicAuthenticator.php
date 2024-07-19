@@ -2,7 +2,13 @@
 
 namespace Octamp\Wamp\Auth;
 
+use Octamp\Wamp\Auth\Response\AuthErrorResponse;
+use Octamp\Wamp\Auth\Response\AuthSuccessResponse;
+use Octamp\Wamp\Auth\Response\HelloErrorResponse;
+use Octamp\Wamp\Auth\Response\HelloSuccessResponse;
 use Octamp\Wamp\Promise\Promise;
+use Octamp\Wamp\Promise\PromiseInterrupted;
+use Octamp\Wamp\Promise\PromiseErrorException;
 use Octamp\Wamp\Promise\PromiseInterface;
 use Octamp\Wamp\Realm\RealmManager;
 use Octamp\Wamp\Session\Session;
@@ -13,43 +19,26 @@ class AnonymousDynamicAuthenticator extends AbstractDynamicAuthenticator
 {
     protected ?RealmManager $realmManager;
 
-    public function processHello(Session $session, HelloMessage $message): PromiseInterface
+    public function processHello(Session $session, HelloMessage $message): HelloSuccessResponse|HelloErrorResponse
     {
-        $promise = $this->sendMessageToAuthenticator($message, []);
-        return $promise->then(function ($result) {
+        try {
+            $result =  $this->sendMessageToAuthenticator($message, [])->wait();
             $authDetails = [];
-            if (isset($result['authid'])) {
-                $authDetails['authid'] = $result['authid'];
+            if (isset($result->authid)) {
+                $authDetails['authid'] = $result->authid;
             }
-            return [
-                'status' => AuthManager::STATUS_NO_CHALLENGE,
-                'auth_details' => $authDetails,
-                'verify_details' => $result,
-                'challenge_details' => [
-                    'challenge_method' => $this->getMethod(),
-                ],
-            ];
-        }, function ($result) {
-            $response = [
-                'status' => AuthManager::STATUS_FAILURE,
-            ];
-            if (isset($result['error_uri'])) {
-                $response['error_uri'] = $result['error_uri'];
+            return $this->generateNoChallengeResponse($authDetails, $result);
+        } catch (PromiseErrorException $exception) {
+            if ($exception->getData() instanceof PromiseInterrupted) {
+                return $this->generateFailureResponse('wamp.error.unknown', []);
             }
-
-            if (isset($result['error_details'])) {
-                $response['error_details'] = $result['error_details'];
-            }
-
-            return $response;
-        });
+            return $this->generateFailureResponse($exception->getData()['error_uri'] ?? '', $exception->getData()['error_details'] ?? []);
+        }
     }
 
-    public function processAuthenticate(Session $session, AuthenticateMessage $message): PromiseInterface
+    public function processAuthenticate(Session $session, AuthenticateMessage $message): AuthSuccessResponse|AuthErrorResponse
     {
-        return new Promise(function (callable $resolve) {
-            $resolve(['status' => AuthManager::STATUS_SUCCESS]);
-        });
+        return $this->generateSuccessResponse([]);
     }
 
     public function getMethod(): string

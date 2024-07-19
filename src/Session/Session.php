@@ -8,6 +8,7 @@ use Octamp\Wamp\Auth\Event\ResultMessageEvent;
 use Octamp\Wamp\Connection\Event\SendMessageEvent;
 use Octamp\Wamp\Connection\WithEventDispatcherInterface;
 use Octamp\Wamp\Event\LeaveRealmEvent;
+use Octamp\Wamp\Promise\Deferred;
 use Octamp\Wamp\Realm\Realm;
 use Octamp\Wamp\Session\Adapter\AdapterInterface;
 use Octamp\Wamp\Session\Event\MessageEvent;
@@ -35,6 +36,11 @@ class Session
     protected int $pendingCallCount = 0;
 
     protected ?AuthenticationDetails $authenticationDetails = null;
+
+    /**
+     * @var Deferred[]
+     */
+    protected array $deferredList = [];
 
     public function __construct(protected AbstractTransport $transport, protected string $serverId, protected AdapterInterface $adapter)
     {
@@ -105,6 +111,11 @@ class Session
         $this->helloMessage = $message;
     }
 
+    public function getHelloMessage(): HelloMessage
+    {
+        return $this->helloMessage;
+    }
+
     public function setRealm(Realm $realm): void
     {
         if ($this->realm !== null) {
@@ -114,13 +125,17 @@ class Session
         $this->realm = $realm;
     }
 
-    public function abort(object $details, string $uri): void
+    public function abort(object|array $details, string $uri): void
     {
+        if (is_array($details)) {
+            $details = (object) $details;
+        }
         if ($this->isAuthenticated()) {
             throw new \Exception('Session::abort called after we are authenticated');
         }
         $abortMessage = new AbortMessage($details, $uri);
         $this->sendMessage($abortMessage);
+        $this->clearDeferred();
     }
 
     public function setAuthenticated(bool $authenticated): void
@@ -175,6 +190,8 @@ class Session
         if ($this->realm !== null) {
             $this->realm->handle($this, new LeaveRealmEvent($this));
         }
+
+        $this->clearDeferred();
     }
 
     public function getMetaInfo(): array
@@ -238,5 +255,26 @@ class Session
     public function incrementWampId(): int|float
     {
         return $this->adapter->incWampIdName($this, 'wampId');
+    }
+
+    public function addDeferred(Deferred $deferred): void
+    {
+        $this->deferredList[] = $deferred;
+    }
+
+    public function cancelDeferred(Deferred $deferred): void
+    {
+        $index = array_search($deferred, $this->deferredList);
+        if ($index !== false) {
+            unset($this->deferredList[$index]);
+        }
+    }
+
+    public function clearDeferred(): void
+    {
+        $keys = array_keys($this->deferredList);
+        foreach ($keys as $key) {
+            unset($this->deferredList[$key]);
+        }
     }
 }
