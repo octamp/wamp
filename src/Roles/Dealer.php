@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Octamp\Wamp\Roles;
 
 use Octamp\Wamp\Adapter\AdapterInterface;

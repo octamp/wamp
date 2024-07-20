@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Octamp\Wamp\Realm;
 
 use Octamp\Wamp\Adapter\AdapterInterface;

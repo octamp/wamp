@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Octamp\Wamp\Event;
 
 use Octamp\Wamp\Session\Session;

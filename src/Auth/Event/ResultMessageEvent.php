@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Octamp\Wamp\Auth\Event;
 
 use Symfony\Component\EventDispatcher\Event;

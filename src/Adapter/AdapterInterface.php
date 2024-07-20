@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Octamp\Wamp\Adapter;
 
 interface AdapterInterface extends \Octamp\Server\Adapter\AdapterInterface

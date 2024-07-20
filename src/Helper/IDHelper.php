@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Octamp\Wamp\Helper;
 
 use Octamp\Wamp\Adapter\AdapterInterface;
@@ -10,7 +12,6 @@ class IDHelper
 {
     private static ?AdapterInterface $adapter = null;
     private static ?SessionAdapterInterface $sessionAdapter = null;
-
 
     public static function setAdapter(AdapterInterface $adapter): void
     {

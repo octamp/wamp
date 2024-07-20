@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Octamp\Wamp\Auth;
 
 class AuthenticationDetails implements \JsonSerializable
