@@ -276,4 +276,14 @@ class Dealer extends AbstractRole implements RoleInterface
             unset($this->procedures[$name]);
         }
     }
+
+    public function getName(): string
+    {
+        return 'dealer';
+    }
+
+    public function getFeatures(): object
+    {
+        return new \stdClass();
+    }
 }

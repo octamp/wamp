@@ -17,7 +17,7 @@ class RedisAdapter implements AdapterInterface
         $prefix = date('Ymd');
         $id = $this->adapter->inc('sesid:current', 1, $prefix);
 
-        return $prefix . str_pad($id, 6, 0, STR_PAD_LEFT);
+        return $prefix . str_pad((string) $id, 6, '0', STR_PAD_LEFT);
     }
 
     public function saveSession(Session $session): void

@@ -12,6 +12,8 @@ use Octamp\Wamp\Auth\Ticket\TicketDynamicAuthenticator;
 use Octamp\Wamp\Auth\Ticket\TicketStaticAuthenticator;
 use Octamp\Wamp\Auth\WampCra\WampCraDynamicAuthenticator;
 use Octamp\Wamp\Auth\WampCra\WampCraStaticAuthenticator;
+use Octamp\Wamp\Event\JoinRealmEvent;
+use Octamp\Wamp\Peers\Router;
 use Octamp\Wamp\Realm\RealmManager;
 use Octamp\Wamp\Session\Session;
 use OpenSwoole\Coroutine;
@@ -50,6 +52,8 @@ class AuthManager implements WithRealmManagerInterface
     protected array $authenticators = [];
 
     protected ?RealmManager $realmManager = null;
+
+    protected ?Router $router = null;
 
     public function __construct(array $auths, protected EventDispatcherInterface $eventDispatcher)
     {
@@ -155,13 +159,7 @@ class AuthManager implements WithRealmManagerInterface
                 $session->sendMessage(new ChallengeMessage($authMethod, $challengeDetails));
             } elseif ($status === self::STATUS_NO_CHALLENGE) {
                 $session->setAuthenticated(true);
-                $details = $session->getAuthenticationDetails()->jsonSerialize();
-                // todo update roles for details
-                $details = array_merge($details, (array) $message->getDetails());
-                $session->sendMessage(new WelcomeMessage(
-                    $session->getSessionId(),
-                    $details
-                ));
+                $this->sendWelecome($session);
             }
         });
     }
@@ -210,14 +208,20 @@ class AuthManager implements WithRealmManagerInterface
         }
 
         $session->setAuthenticated(true);
-        $details = $session->getAuthenticationDetails()->jsonSerialize();
-        // todo update roles for details
-        $details = array_merge($details, (array) $session->getHelloMessage()->getDetails());
+        $this->sendWelecome($session);
+    }
 
-        $session->sendMessage(new WelcomeMessage(
+    protected function sendWelecome(Session $session)
+    {
+        $details = $session->getAuthenticationDetails()->jsonSerialize();
+        $message = new WelcomeMessage(
             $session->getSessionId(),
             $details
-        ));
+        );
+        $this->router?->addFeature($message);
+        $session->sendMessage($message);
+
+        $session->getRealm()->handle($session, new JoinRealmEvent($session));
     }
 
     /**
@@ -247,5 +251,10 @@ class AuthManager implements WithRealmManagerInterface
                 $authenticator->setRealmManager($this->realmManager);
             }
         }
+    }
+
+    public function setRouter(Router $router): void
+    {
+        $this->router = $router;
     }
 }

@@ -132,7 +132,7 @@ That will now run the server
 - [ ] Add Feature
 - [ ] Add checking of role
 
-## RPC Features
+### RPC Features
 
 | Feature                                                           | Status  |
 |-------------------------------------------------------------------|---------|
@@ -150,19 +150,31 @@ That will now run the server
 | [(Interface) Procedure Reflection](#interface-reflection)         | &cross; |
 
 
-## PubSub Features
+### PubSub Features
 
 | Feature                                                   | Status  |
 |-----------------------------------------------------------|---------|
-| [Subscriber Blackwhite Listing](#pubsub-bw-listing)       | &cross; |
-| [Publisher Exclusion](#pubsub-pub-exclusion)              | &cross; |
-| [Publisher Identification](#pubsub-pub-identification)    | &cross; |
+| [Subscriber Blackwhite Listing](#pubsub-bw-listing)       | &check; |
+| [Publisher Exclusion](#pubsub-pub-exclusion)              | &check; |
+| [Publisher Identification](#pubsub-pub-identification)    | &check; |
 | [Publication Trustlevels](#pubsub-pub-trustlevels)        | &cross; |
 | [Subscription Meta API](#pubsub-sub-metapi)               | &cross; |
 | [Pattern-based Subscription](#pattern-based-subscription) | &cross; |
 | [Sharded Subscription](#pubsub-sharded-subscription)      | &cross; |
 | [Event History](#pubsub-event-history)                    | &cross; |
 | [(Interface) Topic Reflection](#interface-reflection)     | &cross; |
+
+### Others
+
+| Feature                     | Status  |
+|-----------------------------|---------|
+| Feature Announcement        | &check; |
+| Broker Session Meta API     | &check; |
+| Dealer Session Meta API     | &cross; |
+| RawSocket Transport         | &cross; |
+| Batched WebSocket transport | &cross; |
+| Call Rerouting              | &cross; |
+| Payload Passthru Mode       | &cross; |
 
 ## TODOs
 

@@ -7,6 +7,7 @@ namespace Octamp\Wamp\Realm;
 use Octamp\Server\Connection\Connection;
 use Octamp\Wamp\Auth\AuthManager;
 use Octamp\Wamp\Event\EventInterface;
+use Octamp\Wamp\Event\JoinRealmEvent;
 use Octamp\Wamp\Event\LeaveRealmEvent;
 use Octamp\Wamp\Peers\Router;
 use Octamp\Wamp\Session\Session;
@@ -77,8 +78,10 @@ class Realm
 
     public function publishMeta(string $topicName, array $arguments, ?object $argumentsKw = null, ?object $options = null): void
     {
+        $session = $this->getMetaSession();
+        $id = $session->incrementWampId();
         $this->handle($this->getMetaSession(), new PublishMessage(
-            Utils::getUniqueId(),
+            $id,
             $options,
             $topicName,
             $arguments,

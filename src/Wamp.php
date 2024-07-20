@@ -78,6 +78,8 @@ class Wamp
             $router->addRole(new Broker($this->adapter, $sessionStorage, $this->serverId));
             $router->addRole(new Dealer($this->adapter, $sessionStorage, $this->serverId));
 
+            $this->authManager->setRouter($router);
+
             $router->addTransportProviders($this->transportProviders);
 
             $connection = DummyConnection::createFromArray([

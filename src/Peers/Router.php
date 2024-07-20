@@ -12,6 +12,7 @@ use Thruway\Event\MessageEvent;
 use Thruway\Logging\Logger;
 use Thruway\Message\GoodbyeMessage;
 use Thruway\Message\Message;
+use Thruway\Message\WelcomeMessage;
 
 class Router
 {
@@ -72,5 +73,22 @@ class Router
         $session->sendMessage($goodByeMessage);
         $session->setGoodByeSent(true);
         $session->shutdown();
+    }
+
+    public function getFeatures(): object
+    {
+        $roles = new \stdClass();
+        foreach ($this->roles as $role) {
+            $roles->{$role->getName()} = $role->getFeatures();
+        }
+
+        return $roles;
+    }
+
+    public function addFeature(WelcomeMessage $message): void
+    {
+        foreach ($this->roles as $role) {
+            $message->addFeatures($role->getName(), $role->getFeatures());
+        }
     }
 }
