@@ -4,36 +4,125 @@ namespace Octamp\Wamp\Adapter;
 
 use OpenSwoole\Coroutine;
 use OpenSwoole\Timer;
+use Octamp\Wamp\Pools\Pool;
 
 class RedisAdapter extends \Octamp\Server\Adapter\RedisAdapter implements AdapterInterface
 {
+    protected Pool $clients;
+
+    public function __construct(string $host, int $port, ?string $username = null, ?string $password = null, array $options = [])
+    {
+        parent::__construct($host, $port, $username, $password, $options);
+
+        $this->clients = new Pool('redis', 3 /* number of connections */, function() {
+            return $this->createPredis();
+        });
+    }
+
+    public function publish(string $topic, array $payload = [], ?string $serverId = null): void
+    {
+        $channel = ($serverId ?? 'global') . ':message';
+        $client = $this->clients->pop();
+        $client->getResource()->publish($channel, json_encode([$topic, $payload]));
+        $this->clients->push($client);
+    }
+
+    public function set(string $key, array $data = []): void
+    {
+        $client = $this->clients->pop();;
+        foreach ($data as $field => $value) {
+            if (is_array($value)) {
+                $client->getResource()->hset($key, (string) $field, json_encode($value));
+            } else {
+                $client->getResource()->hset($key, (string) $field, $value);
+            }
+        }
+        $this->clients->push($client);
+    }
+
+    public function del(string $key, array $fields = []): void
+    {
+        $client = $this->clients->pop();;
+        if (!empty($fields)) {
+            $client->getResource()->hdel($key, $fields);
+        } else {
+            $client->getResource()->del($key);
+        }
+        $this->clients->push($client);
+    }
+
+    public function get(string $key, array $fields = []): ?array
+    {
+        $client = $this->clients->pop();;
+        if (!$client->getResource()->exists($key)) {
+            $this->clients->push($client);
+            return null;
+        }
+        $result = [];
+
+        if (empty($fields)) {
+            $result = $client->getResource()->hgetall($key);
+        } else {
+            foreach ($fields as $field) {
+                $result[$field] = $client->getResource()->hget($key, $field);
+            }
+        }
+
+        $this->clients->push($client);
+
+        return $this->decodeData($result);
+    }
+
+    public function find(string $search): array
+    {
+        $client = $this->clients->pop();;
+        $keys = $client->getResource()->keys($search);
+        $results = [];
+        foreach ($keys as $key) {
+            $results[] = $this->decodeData($client->getResource()->hgetall($key));
+        }
+
+        $this->clients->push($client);
+
+        return $results;
+    }
+
+    public function keys(string $search): array
+    {
+        $client = $this->clients->pop();;
+        $keys = $client->getResource()->keys($search);
+        $this->clients->push($client);
+
+        return $keys;
+    }
+
     public function addToList(string $key, mixed $value): bool
     {
-        $client = $this->createPredis();
-        $response = $client->sadd($key, [$value]);
-        $client->quit();
+        $client = $this->clients->pop();
+        $response = $client->getResource()->sadd($key, [$value]);
+        $this->clients->push($client);
 
         return (bool) $response;
     }
 
     public function getList(string $key): array
     {
-        $client = $this->createPredis();
-        $response = $client->smembers($key);
-        $client->quit();
+        $client = $this->clients->pop();
+        $response = $client->getResource()->smembers($key);
+        $this->clients->push($client);
 
         return $response;
     }
 
     public function inc(string $key, int $increment = 1, ?string $field = null): int
     {
-        $client = $this->createPredis();
+        $client = $this->clients->pop();
         if ($field !== null) {
-            $value = $client->hincrby($key, $field, $increment);
+            $value = $client->getResource()->hincrby($key, $field, $increment);
         } else {
-            $value = $client->incrby($key, $increment);
+            $value = $client->getResource()->incrby($key, $increment);
         }
-        $client->quit();
+        $this->clients->push($client);
 
         return $value;
     }
@@ -45,9 +134,9 @@ class RedisAdapter extends \Octamp\Server\Adapter\RedisAdapter implements Adapte
 
     public function countFields(string $key): int
     {
-        $client = $this->createPredis();
-        $count = $client->hlen($key);
-        $client->quit();
+        $client = $this->clients->pop();
+        $count = $client->getResource()->hlen($key);
+        $this->clients->push($client);
 
         return $count;
     }
@@ -67,23 +156,23 @@ class RedisAdapter extends \Octamp\Server\Adapter\RedisAdapter implements Adapte
 
     public function unlock(string $key, int|string $value): bool
     {
-        $client = $this->createPredis();
-        $result = $client->get($key);
+        $client = $this->clients->pop();;
+        $result = $client->getResource()->get($key);
         if ($result === $value) {
-            $client->del($key);
+            $client->getResource()->del($key);
         }
-        $client->quit();
+        $this->clients->push($client);
 
         return $result === $value;
     }
 
     protected function lockCallback(Coroutine\Channel $chan, string $key, int|string $value, int $seconds = 1): void
     {
-        $client = $this->createPredis();
-        if ($client->setnx($key, $value) === 1) {
+        $client = $this->clients->pop();;
+        if ($client->getResource()->setnx($key, $value) === 1) {
             $chan->push(true);
         }
-        $client->quit();
+        $this->clients->push($client);
 
         if ($chan->errCode === Coroutine\Channel::CHANNEL_OK) {
             Timer::after(500, [$this, 'lockCallback'], $chan, $key, $value, $seconds);
@@ -92,37 +181,37 @@ class RedisAdapter extends \Octamp\Server\Adapter\RedisAdapter implements Adapte
 
     public function exists(string $key): bool
     {
-        $client = $this->createPredis();
-        $exists = $client->exists($key);
-        $client->quit();
+        $client = $this->clients->pop();;
+        $exists = $client->getResource()->exists($key);
+        $this->clients->push($client);
 
         return (bool) $exists;
     }
 
     public function hkeys(string $key): array
     {
-        $client = $this->createPredis();
-        $keys = $client->hkeys($key);
-        $client->quit();
+        $client = $this->clients->pop();;
+        $keys = $client->getResource()->hkeys($key);
+        $this->clients->push($client);
 
         return $keys;
     }
 
     public function findWithRetainKey(string $search): array
     {
-        $client = $this->createPredis();
-        $keys = $client->keys($search);
+        $client = $this->clients->pop();;
+        $keys = $client->getResource()->keys($search);
         $results = [];
         foreach ($keys as $key) {
-            $results[$key] = $this->decodeData($client->hgetall($key));
+            $results[$key] = $this->decodeData($client->getResource()->hgetall($key));
         }
 
-        $client->quit();
+        $this->clients->push($client);
 
         return $results;
     }
 
-    private function decodeData(array $data): array
+    protected function decodeData(array $data): array
     {
         foreach ($data as &$value) {
             try {
@@ -139,13 +228,13 @@ class RedisAdapter extends \Octamp\Server\Adapter\RedisAdapter implements Adapte
 
     public function findOne(string $search): ?array
     {
-        $client = $this->createPredis();
-        $keys = $client->keys($search);
+        $client = $this->clients->pop();;
+        $keys = $client->getResource()->keys($search);
         $result = null;
         if (!empty($keys)) {
-            $result = $this->decodeData($client->hgetall($keys[0]));
+            $result = $this->decodeData($client->getResource()->hgetall($keys[0]));
         }
-        $client->quit();
+        $this->clients->push($client);
 
         return $result;
     }

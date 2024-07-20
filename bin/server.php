@@ -16,16 +16,12 @@ $redisOptions = [
         'database' => $_ENV['REDIS_DATABASE'] ?? 0,
     ]
 ];
-if (!$_ENV['REDIS_PASSWORD']) {
-    $redisOptions['options']['password'] = $_ENV['REDIS_PASSWORD'];
-}
-if (!$_ENV['REDIS_USERNAME']) {
-    $redisOptions['options']['username'] = $_ENV['REDIS_USERNAME'];
-}
 
 $adapter = new RedisAdapter(
     $_ENV['REDIS_HOST'],
     $_ENV['REDIS_PORT'],
+    $_ENV['REDIS_USERNAME'] ?? null,
+    $_ENV['REDIS_PASSWORD'] ?? null,
     $redisOptions
 );
 $transportConfig = new TransportProviderConfig(

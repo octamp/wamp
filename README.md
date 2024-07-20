@@ -150,7 +150,7 @@ That will now run the server
 | [(Interface) Procedure Reflection](#interface-reflection)         | &cross; |
 
 
-**Advanced PubSub Features**
+## PubSub Features
 
 | Feature                                                   | Status  |
 |-----------------------------------------------------------|---------|
