@@ -8,9 +8,12 @@ use Octamp\Wamp\Adapter\AdapterInterface;
 use Octamp\Wamp\Event\JoinRealmEvent;
 use Octamp\Wamp\Event\LeaveRealmEvent;
 use Octamp\Wamp\Helper\IDHelper;
+use Octamp\Wamp\Matcher\Matcher;
+use Octamp\Wamp\Matcher\UnExistMatchException;
 use Octamp\Wamp\Session\Session;
 use Octamp\Wamp\Session\SessionStorage;
 use Octamp\Wamp\Subscription\Subscription;
+use Octamp\Wamp\Subscription\SubscriptionGroup;
 use OpenSwoole\Coroutine;
 use OpenSwoole\Coroutine\Channel;
 use Thruway\Message\ErrorMessage;
@@ -28,13 +31,13 @@ class Broker extends AbstractRole implements RoleInterface
     protected const TYPE_REMOVE_SUBSCRIPTION = 2;
 
     /**
-     * @var array<int, array<int, Subscription>>
+     * @var SubscriptionGroup[]
      */
     protected array $subscriptionGroups = [];
     protected bool $stopped = false;
     protected Channel $subscribeChan;
 
-    public function __construct(AdapterInterface $adapter, SessionStorage $sessionStorage, protected string $serverId)
+    public function __construct(AdapterInterface $adapter, SessionStorage $sessionStorage, protected Matcher $matcher, protected string $serverId)
     {
         parent::__construct($adapter, $sessionStorage);
         $this->subscribeChan = new Channel(1);
@@ -48,17 +51,33 @@ class Broker extends AbstractRole implements RoleInterface
                 $data = $this->subscribeChan->pop();
                 $type = $data[0];
                 if ($type === self::TYPE_SUBSCRIBE) {
+                    /** @var Session $session */
                     $session = $data[1];
+                    /** @var SubscribeMessage $message */
                     $message = $data[2];
-                    if (!isset($this->subscriptionGroups[$message->getUri()])) {
-                        $this->subscriptionGroups[$message->getUri()] = [];
+                    /** @var string $hash */
+                    $hash = $data[3];
+                    try {
+                        if (!isset($this->subscriptionGroups[$hash])) {
+                            $this->subscriptionGroups[$hash] = new SubscriptionGroup(
+                                $this->matcher->getMatch($message->getMatchType()),
+                                $message->getUri(),
+                                $message->getOptions(),
+                                $this->adapter,
+                                $this->sessionStorage,
+                                $this->serverId);
+                            $this->subscriptionGroups[$hash]->save();
+                        }
+                        Coroutine::create(function() use ($session, $message) {
+                            $this->handleSubscribeMessage($session, $message);
+                        });
+                    } catch (UnExistMatchException) {
+                        $errorMessage = ErrorMessage::createErrorMessageFromMessage($message, 'wamp.error.option_not_allowed');
+                        $session->sendMessage($errorMessage);
                     }
-                    Coroutine::create(function () use ($session, $message) {
-                        $this->handleSubscribeMessage($session, $message);
-                    });
                 } elseif ($type === self::TYPE_REMOVE_SUBSCRIPTION) {
-                    $uri = $data[1];
-                    $this->removeSubscriptionGroup($uri);
+                    $hash = $data[1];
+                    $this->removeSubscriptionGroup($hash);
                 }
             }
             $this->subscribeChan->close();
@@ -72,68 +91,17 @@ class Broker extends AbstractRole implements RoleInterface
         $this->stopped = true;
     }
 
-    public function onPublishMessage(Session $session, PublishMessage $message): void
+    public function onPublishMessage(Session $session, PublishMessage $message, bool $includeSessionMeta = false): void
     {
         if ($message->getPublicationId() === null) {
             $message->setPublicationId(IDHelper::generateGlobalWampID());
         }
 
-        $options = $message->getOptions();
-        $excludeSessions = $options->exclude ?? [];
-        $excludeAuths = $options->exclude_authid ?? [];
-        $excludeRoles = $options->exclude_authrole ?? [];
-
-        $eligibleSession = $options->eligible ?? null;
-        $eligibleAuths = $options->eligible_authid ?? null;
-        $eligibleRoles = $options->eligible_authrole ?? null;
-
-        $excludeMe = $message->excludeMe();
-
-        $subscriptionGroupsUri = $this->adapter->keys('sub:*');
-        foreach ($subscriptionGroupsUri as $subscriptionGroupUri) {
-            $messageUri = substr($subscriptionGroupUri, 4);
-            if ($messageUri === $message->getUri()) {
-                $subscriptionsRaw = $this->adapter->get($subscriptionGroupUri);
-                foreach ($subscriptionsRaw as $key => $subscriptionRaw) {
-                    $subscription = $this->getSubscription($messageUri, $key, $subscriptionRaw);
-                    $sessionId = $subscription->getSession()->getSessionId();
-                    $authId = $subscription->getSession()->getAuthenticationDetails()->getAuthId();
-                    $authRole = $subscription->getSession()->getAuthenticationDetails()->getAuthRole();
-
-                    if (
-                        ($eligibleSession !== null && !in_array($sessionId, $eligibleSession))
-                        || ($eligibleAuths !== null && !in_array($authId, $eligibleAuths))
-                        || ($eligibleRoles !== null && !in_array($authId, $eligibleRoles))
-                    ) {
-                        continue;
-                    }
-                    if (
-                        in_array($sessionId, $excludeSessions)
-                        || in_array($authId, $excludeAuths)
-                        || in_array($authRole, $excludeRoles)
-                    ) {
-                        continue;
-                    }
-
-                    if ($excludeMe && $sessionId === $session->getSessionId()) {
-                        continue;
-                    }
-
-                    $eventMsg = EventMessage::createFromPublishMessage($message, $subscription->getId());
-                    $discloseMe = $message->getOptions()->disclose_me ?? false;
-                    if ($discloseMe || $subscription->isDisclosePublisher()) {
-                        $eventMsg->getDetails()->publisher = $session->getSessionId();
-                        if ($authId !== null) {
-                            $eventMsg->getDetails()->publisher_authid = $authId;
-                        }
-                        if ($authRole !== null) {
-                            $eventMsg->getDetails()->publisher_authrole = $authId;
-                        }
-                    }
-
-                    $subscription->sendEventMessage($eventMsg);
-                }
+        foreach ($this->loopAllSubscriptionGroup() as $subscriptionGroup) {
+            if (!$subscriptionGroup->isPublishMatch($message)) {
+                continue;
             }
+            $subscriptionGroup->publishMessage($session, $message, $includeSessionMeta);
         }
 
         if ($message->acknowledge()) {
@@ -141,6 +109,9 @@ class Broker extends AbstractRole implements RoleInterface
         }
     }
 
+    /**
+     * @deprecated Use SubscriptionGroup
+     */
     protected function getSubscription(string $groupKey, string $key, ?array $raw = null): ?Subscription
     {
         if (isset($this->subscriptionGroups[$groupKey][$key])) {
@@ -158,8 +129,9 @@ class Broker extends AbstractRole implements RoleInterface
 
     public function onSubscribeMessage(Session $session, SubscribeMessage $message): void
     {
-        if (!isset($this->subscriptionGroups[$message->getUri()])) {
-            $this->subscribeChan->push([self::TYPE_SUBSCRIBE, $session, $message]);
+        $hash = SubscriptionGroup::generateHash($message->getUri(), $message->getOptions());
+        if (!isset($this->subscriptionGroups[$hash])) {
+            $this->subscribeChan->push([self::TYPE_SUBSCRIBE, $session, $message, $hash]);
         } else {
             $this->handleSubscribeMessage($session, $message);
         }
@@ -168,53 +140,80 @@ class Broker extends AbstractRole implements RoleInterface
     protected function handleSubscribeMessage(Session $session, SubscribeMessage $message): void
     {
         $subscription = Subscription::createSubscriptionFromSubscribeMessage($session, $message);
-        $uri = $subscription->getUri();
-
-        $this->subscriptionGroups[$uri][$subscription->getId()] = $subscription;
-        $this->adapter->setField('sub:' . $uri, $subscription->getId(), [
-            'sessionId' => $session->getId(),
-            'transportId' => $session->getTransportId(),
-            'subscriptionId' => $subscription->getId(),
-            'message' => $message->getMessageParts(),
-        ]);
+        $subscriptionGroup = $this->getSubscriptionGroup($subscription);
+        $subscriptionGroup->addSubscription($subscription);
 
         $subscribedMessage = new SubscribedMessage($message->getRequestId(), $subscription->getId());
         $session->sendMessage($subscribedMessage);
     }
 
-    public function onUnsubscribeMessage(Session $session, UnsubscribeMessage $message): void
+    protected function getSubscriptionGroup(Subscription $subscription): SubscriptionGroup
     {
-        $subscription = null;
-        foreach ($this->subscriptionGroups as $subscriptions) {
-            /** @var Subscription $subscription */
-            $result = $subscriptions[$message->getSubscriptionId()] ?? null;
-            if ($result instanceof Subscription) {
-                if ($result->getSession()->getId() === $session->getId()) {
-                    $subscription = $result;
-                }
-                break;
+        foreach ($this->subscriptionGroups as $subscriptionGroup) {
+            if ($subscriptionGroup->isSubscriptionMatch($subscription)) {
+                return $subscriptionGroup;
             }
         }
 
-        if ($subscription === null) {
-            $error = ErrorMessage::createErrorMessageFromMessage($message);
-            $error->setErrorURI('wamp.error.no_such_subscription');
-            $session->sendMessage($error);
-            return;
+        return new SubscriptionGroup($this->matcher->getMatch($subscription->getMatch()), $subscription->getUri(), $subscription->getOptions(), $this->adapter, $this->sessionStorage, $this->serverId);
+    }
+
+    protected function getSubscriptionGroupByHash(string $hash, bool $global = false): ?SubscriptionGroup
+    {
+        if (isset($this->subscriptionGroups[$hash])) {
+            return $this->subscriptionGroups[$hash];
         }
 
-        $this->removeSubscription($subscription);
-        $session->sendMessage(new UnsubscribedMessage($message->getRequestId()));
+        if ($global) {
+            $raw = $this->adapter->get('subg:' . $hash);
+            if ($raw !== null) {
+                return new SubscriptionGroup($raw['match'], $raw['uri'], $raw['options'], $this->adapter, $this->sessionStorage, $this->serverId);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return SubscriptionGroup[]
+     */
+    protected function loopAllSubscriptionGroup(): \Generator
+    {
+        $keys = $this->adapter->keys('subg:*');
+        foreach ($keys as $key) {
+            [,$hash] = explode(':', $key);
+            $group = $this->getSubscriptionGroupByHash($hash, true);
+            if ($group !== null) {
+                yield $group;
+            }
+        }
+    }
+
+    public function onUnsubscribeMessage(Session $session, UnsubscribeMessage $message): void
+    {
+        foreach ($this->subscriptionGroups as $subscriptionGroup) {
+            /** @var Subscription $subscription */
+            $result = $subscriptionGroup->getSubscription($message->getSubscriptionId());
+            if ($result instanceof Subscription) {
+                if ($result->getSession()->getId() === $session->getId()) {
+                    $this->removeSubscription($subscriptionGroup, $subscription);
+                    $session->sendMessage(new UnsubscribedMessage($message->getRequestId()));
+                }
+                return;
+            }
+        }
+
+        $error = ErrorMessage::createErrorMessageFromMessage($message);
+        $error->setErrorURI('wamp.error.no_such_subscription');
+        $session->sendMessage($error);
     }
 
     public function onLeaveRealmEvent(Session $session, LeaveRealmEvent $event): void
     {
-        foreach ($this->subscriptionGroups as $subscriptions) {
-            /** @var Subscription $subscription */
+        foreach ($this->subscriptionGroups as $subscriptionGroup) {
+            $subscriptions = $subscriptionGroup->getSessionSubscriptions($session);
             foreach ($subscriptions as $subscription) {
-                if ($subscription->getSession()->getId() === $session->getId()) {
-                    $this->removeSubscription($subscription);
-                }
+                $this->removeSubscription($subscriptionGroup, $subscription);
             }
         }
 
@@ -222,26 +221,7 @@ class Broker extends AbstractRole implements RoleInterface
             return;
         }
 
-        $subscriptionGroupsUri = $this->adapter->keys('sub:');
-        foreach ($subscriptionGroupsUri as $subscriptionGroupUri) {
-            $messageUri = substr($subscriptionGroupUri, 4);
-            if ($messageUri === 'wamp.session.on_leave') {
-                $subscriptionsRaw = $this->adapter->get($subscriptionGroupUri);
-                foreach ($subscriptionsRaw as $key => $subscriptionRaw) {
-                    $subscription = $this->getSubscription($messageUri, $key, $subscriptionRaw);
-                    $sessionId = $subscription->getSession()->getSessionId();
-                    $authId = $subscription->getSession()->getAuthenticationDetails()->getAuthId();
-                    $authRole = $subscription->getSession()->getAuthenticationDetails()->getAuthRole();
-
-                    $eventMsg = EventMessage::createFromPublishMessage(new PublishMessage(IDHelper::generateGlobalWampID(), [], 'wamp.session.on_leave'), $subscription->getId());
-                    $eventMsg->getDetails()->session = $sessionId;
-                    $eventMsg->getDetails()->authid = $authId;
-                    $eventMsg->getDetails()->authrole = $authRole;
-
-                    $subscription->sendEventMessage($eventMsg);
-                }
-            }
-        }
+        $this->onPublishMessage($session, new PublishMessage(IDHelper::generateGlobalWampID(), [], 'wamp.session.on_leave'), true);
     }
 
     public function onJoinRealmEvent(Session $session, JoinRealmEvent $event): void
@@ -250,47 +230,25 @@ class Broker extends AbstractRole implements RoleInterface
             return;
         }
 
-        $subscriptionGroupsUri = $this->adapter->keys('sub:');
-        foreach ($subscriptionGroupsUri as $subscriptionGroupUri) {
-            $messageUri = substr($subscriptionGroupUri, 4);
-            if ($messageUri === 'wamp.session.on_join') {
-                $subscriptionsRaw = $this->adapter->get($subscriptionGroupUri);
-                foreach ($subscriptionsRaw as $key => $subscriptionRaw) {
-                    $subscription = $this->getSubscription($messageUri, $key, $subscriptionRaw);
-                    $sessionId = $subscription->getSession()->getSessionId();
-                    $authId = $subscription->getSession()->getAuthenticationDetails()->getAuthId();
-                    $authRole = $subscription->getSession()->getAuthenticationDetails()->getAuthRole();
-                    $authMethod = $subscription->getSession()->getAuthenticationDetails()->getAuthMethod();
-                    $authProvider = $subscription->getSession()->getAuthenticationDetails()->getAuthProvider();
-
-                    $eventMsg = EventMessage::createFromPublishMessage(new PublishMessage(IDHelper::generateGlobalWampID(), [], 'wamp.session.on_join'), $subscription->getId());
-                    $eventMsg->getDetails()->session = $sessionId;
-                    $eventMsg->getDetails()->authid = $authId;
-                    $eventMsg->getDetails()->authrole = $authRole;
-                    $eventMsg->getDetails()->authmethod = $authMethod;
-                    $eventMsg->getDetails()->authprovider = $authProvider;
-
-                    $subscription->sendEventMessage($eventMsg);
-                }
-            }
-        }
+        $this->onPublishMessage($session, new PublishMessage(IDHelper::generateGlobalWampID(), [], 'wamp.session.on_join'), true);
     }
 
-    protected function removeSubscription(Subscription $subscription): void
+    protected function removeSubscription(SubscriptionGroup $subscriptionGroup, Subscription $subscription): void
     {
-        if ($this->subscriptionGroups[$subscription->getUri()]) {
-            unset($this->subscriptionGroups[$subscription->getUri()][$subscription->getId()]);
-        }
-        $this->adapter->del($subscription->getUri(), [$subscription->getId()]);
-        $this->subscribeChan->push([self::TYPE_REMOVE_SUBSCRIPTION, $subscription->getUri()]);
+        $subscriptionGroup->removeSubscription($subscription->getId());
+        $this->subscribeChan->push([self::TYPE_REMOVE_SUBSCRIPTION, $subscriptionGroup->hash(), $subscription->getId()]);
     }
 
-    protected function removeSubscriptionGroup(string $uri): void
+    protected function removeSubscriptionGroup(string $hash): void
     {
-        if (empty($this->subscriptionGroups[$uri])) {
-            unset($this->subscriptionGroups[$uri]);
-            if ($this->adapter->countFields($uri) === 0) {
-                $this->adapter->del('sub:' . $uri);
+        if (!isset($this->subscriptionGroups[$hash])) {
+            return;
+        }
+
+        if ($this->subscriptionGroups[$hash]->isEmpty()) {
+            unset($this->subscriptionGroups[$hash]);
+            if ($this->adapter->countFields('sub:' . $hash) === 0) {
+                $this->adapter->del('sub:' . $hash);
             }
         }
     }
@@ -306,6 +264,7 @@ class Broker extends AbstractRole implements RoleInterface
         $features->subscriber_blackwhite_listing = true;
         $features->publisher_exclusion = true;
         $features->publisher_identification = true;
+        $features->pattern_based_subscription = true;
 
         return $features;
     }

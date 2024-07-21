@@ -129,40 +129,39 @@ That will now run the server
 
 **Additional Authentication**
 
-- [ ] Add Feature
 - [ ] Add checking of role
 
 ### RPC Features
 
-| Feature                                                           | Status  |
-|-------------------------------------------------------------------|---------|
-| [Progressive Call Results](#rpc-progressive-call-results)         | &cross; |
-| [Progressive Call Invocations](#rpc-progressive-call-invocations) | &cross; |
-| [Call Timeout](#rpc-call-timeout)                                 | &cross; |
-| [Call Canceling](#rpc-call-canceling)                             | &cross; |
-| [Caller Identification](#rpc-call-identification)                 | &cross; |
-| [Call Trustlevels](#rpc-call-trust-levels)                        | &cross; |
-| [Registration Meta API](#rpc-reg-metapi)                          | &cross; |
-| [Pattern-based Registration](#rpc-pattern-reg)                    | &cross; |
-| [Shared Registration](#rpc-shared-registration)                   | &cross; |
-| [Sharded Registration](##rpc-sharded-registration)                | &cross; |
-| [Registration Revocation](#rpc-registration-revocation)           | &cross; |
-| [(Interface) Procedure Reflection](#interface-reflection)         | &cross; |
+| Feature                          | Status  |
+|----------------------------------|---------|
+| Progressive Call Results         | &cross; |
+| Progressive Call Invocations     | &cross; |
+| Call Timeout                     | &cross; |
+| Call Canceling                   | &cross; |
+| Caller Identification            | &cross; |
+| Call Trustlevels                 | &cross; |
+| Registration Meta API            | &cross; |
+| Pattern-based Registration       | &cross; |
+| Shared Registration              | &cross; |
+| Sharded Registration             | &cross; |
+| Registration Revocation          | &cross; |
+| (Interface) Procedure Reflection | &cross; |
 
 
 ### PubSub Features
 
-| Feature                                                   | Status  |
-|-----------------------------------------------------------|---------|
-| [Subscriber Blackwhite Listing](#pubsub-bw-listing)       | &check; |
-| [Publisher Exclusion](#pubsub-pub-exclusion)              | &check; |
-| [Publisher Identification](#pubsub-pub-identification)    | &check; |
-| [Publication Trustlevels](#pubsub-pub-trustlevels)        | &cross; |
-| [Subscription Meta API](#pubsub-sub-metapi)               | &cross; |
-| [Pattern-based Subscription](#pattern-based-subscription) | &cross; |
-| [Sharded Subscription](#pubsub-sharded-subscription)      | &cross; |
-| [Event History](#pubsub-event-history)                    | &cross; |
-| [(Interface) Topic Reflection](#interface-reflection)     | &cross; |
+| Feature                       | Status  |
+|-------------------------------|---------|
+| Subscriber Blackwhite Listing | &check; |
+| Publisher Exclusion           | &check; |
+| Publisher Identification      | &check; |
+| Publication Trustlevels       | &cross; |
+| Subscription Meta API         | &cross; |
+| Pattern-based Subscription    | &check; |
+| Sharded Subscription          | &cross; |
+| Event History                 | &cross; |
+| (Interface) Topic Reflection  | &cross; |
 
 ### Others
 

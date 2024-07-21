@@ -13,6 +13,7 @@ use Octamp\Wamp\Config\TransportProviderConfig;
 use Octamp\Wamp\Connection\DummyConnection;
 use Octamp\Wamp\Helper\IDHelper;
 use Octamp\Wamp\Helper\SerializerHelper;
+use Octamp\Wamp\Matcher\Matcher;
 use Octamp\Wamp\Peers\Router;
 use Octamp\Wamp\Realm\RealmManager;
 use Octamp\Wamp\Roles\Broker;
@@ -74,9 +75,11 @@ class Wamp
             $sessionStorage = new SessionStorage($sessionAdapter, $server->getConnectionStorage(), $this->realmManager, $this->serverId);
             $this->realmManager->init($sessionStorage, $this->adapter);
 
+            $matcher = new Matcher();
+
             $router = new Router();
-            $router->addRole(new Broker($this->adapter, $sessionStorage, $this->serverId));
-            $router->addRole(new Dealer($this->adapter, $sessionStorage, $this->serverId));
+            $router->addRole(new Broker($this->adapter, $sessionStorage, $matcher, $this->serverId));
+            $router->addRole(new Dealer($this->adapter, $sessionStorage, $matcher, $this->serverId));
 
             $this->authManager->setRouter($router);
 

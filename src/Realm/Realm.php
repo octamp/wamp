@@ -69,24 +69,7 @@ class Realm
 
     public function onLeaveRealmEvent(Session $session, LeaveRealmEvent $event): void
     {
-        if ($session->isAuthenticated()) {
-            $this->publishMeta('wamp.session.on_leave', [$session->getMetaInfo()]);
-        }
-
         $this->sessionStorage->removeSession($session);
-    }
-
-    public function publishMeta(string $topicName, array $arguments, ?object $argumentsKw = null, ?object $options = null): void
-    {
-        $session = $this->getMetaSession();
-        $id = $session->incrementWampId();
-        $this->handle($this->getMetaSession(), new PublishMessage(
-            $id,
-            $options,
-            $topicName,
-            $arguments,
-            $argumentsKw
-        ));
     }
 
     public function getMetaSession(): Session

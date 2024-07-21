@@ -7,6 +7,7 @@ namespace Octamp\Wamp\Adapter;
 use OpenSwoole\Coroutine;
 use OpenSwoole\Timer;
 use Octamp\Wamp\Pools\Pool;
+use Predis\Client;
 
 class RedisAdapter extends \Octamp\Server\Adapter\RedisAdapter implements AdapterInterface
 {
@@ -134,6 +135,19 @@ class RedisAdapter extends \Octamp\Server\Adapter\RedisAdapter implements Adapte
         $this->set($key, [$field => $data]);
     }
 
+    public function getField(string $key, string $field): mixed
+    {
+        $data = $this->runCommand(function (Client $client) use ($key, $field) {
+            $client->getResource()->hget($key, $field);
+        });
+
+        if (is_array($data)) {
+            return $this->decodeData($data);
+        }
+
+        return $data;
+    }
+
     public function countFields(string $key): int
     {
         $client = $this->clients->pop();
@@ -230,7 +244,7 @@ class RedisAdapter extends \Octamp\Server\Adapter\RedisAdapter implements Adapte
 
     public function findOne(string $search): ?array
     {
-        $client = $this->clients->pop();;
+        $client = $this->clients->pop();
         $keys = $client->getResource()->keys($search);
         $result = null;
         if (!empty($keys)) {
@@ -239,5 +253,14 @@ class RedisAdapter extends \Octamp\Server\Adapter\RedisAdapter implements Adapte
         $this->clients->push($client);
 
         return $result;
+    }
+
+    protected function runCommand(callable $callable): mixed
+    {
+        $client = $this->clients->pop();
+        $data = call_user_func($callable, $client->getResource());
+        $this->clients->push($client);
+
+        return $data;
     }
 }

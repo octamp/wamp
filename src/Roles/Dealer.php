@@ -6,6 +6,7 @@ namespace Octamp\Wamp\Roles;
 
 use Octamp\Wamp\Adapter\AdapterInterface;
 use Octamp\Wamp\Event\LeaveRealmEvent;
+use Octamp\Wamp\Matcher\Matcher;
 use Octamp\Wamp\Registration\Call;
 use Octamp\Wamp\Registration\Procedure;
 use Octamp\Wamp\Registration\Registration;
@@ -29,7 +30,7 @@ class Dealer extends AbstractRole implements RoleInterface
     protected array $procedures = [];
     protected \SplObjectStorage $registrationsBySession;
 
-    public function __construct(AdapterInterface $adapter, SessionStorage $sessionStorage, protected string $serverId)
+    public function __construct(AdapterInterface $adapter, SessionStorage $sessionStorage, protected Matcher $matcher, protected string $serverId)
     {
         parent::__construct($adapter, $sessionStorage);
         $this->registrationsBySession = new \SplObjectStorage();

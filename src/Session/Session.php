@@ -199,35 +199,20 @@ class Session
 
     public function getMetaInfo(): array
     {
-        // TODO
-        if ($this->getAuthenticationDetails() instanceof AuthenticationDetails) {
-            $authId     = $this->getAuthenticationDetails()->getAuthId();
-            $authMethod = $this->getAuthenticationDetails()->getAuthMethod();
-            $authRole   = $this->getAuthenticationDetails()->getAuthRole();
-            $authRoles  = $this->getAuthenticationDetails()->getAuthRoles();
-        } else {
-            $authId     = "anonymous";
-            $authMethod = "anonymous";
-            $authRole   = "anonymous";
-            $authRoles  = [];
-        }
-
         return [
-            "realm"         => $this->getRealm()->name,
-            "authprovider"  => null,
-            "authid"        => $authId,
-            "authrole"      => $authRoles,
-            "authroles"     => $authRole,
-            "authmethod"    => $authMethod,
-            "session"       => $this->getId(),
-            "role_features" => $this->getRoleFeatures()
+            'session' => $this->getSessionId(),
+            'authid' => $this->getAuthenticationDetails()->getAuthId(),
+            'authrole' => $this->getAuthenticationDetails()->getAuthRole(),
+            'authroles' => $this->getAuthenticationDetails()->getAuthRoles(),
+            'authmethod' => $this->getAuthenticationDetails()->getAuthMethod(),
+            'authprovider' => $this->getAuthenticationDetails()->getAuthProvider(),
+            'authextra' => $this->getAuthenticationDetails()->getAuthExtra(),
         ];
     }
 
     public function getRoleFeatures(): array
     {
-        // TODO
-        return [];
+        return $this->getHelloMessage()->getDetails()?->roles ?? [];
     }
 
     public function incPendingCallCount(): int

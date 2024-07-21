@@ -33,25 +33,22 @@ class Subscription
 
         $this->uri = $uri;
         $this->session = $session;
-        $this->id = $id ?? IDHelper::generateRouterWampID($session->getServerId());
+        $this->id = $id ??  $session->getSessionId() . ':' . $session->incrementWampId();
         $this->disclosePublisher = false;
         $this->pausedForState = false;
         $this->pauseQueue = new \SplQueue();
 
         $this->setOptions($options);
 
+        if (isset($options->disclose_publisher) && $options->disclose_publisher === true) {
+            $this->setDisclosePublisher(true);
+        }
+
     }
 
     public static function createSubscriptionFromSubscribeMessage(Session $session, SubscribeMessage $msg, ?string $id = null): static
     {
-        $options      = $msg->getOptions();
-        $subscription = new static($msg->getTopicName(), $session, $options, $id);
-
-        if (isset($options->disclose_publisher) && $options->disclose_publisher === true) {
-            $subscription->setDisclosePublisher(true);
-        }
-
-        return $subscription;
+        return new static($msg->getTopicName(), $session, $msg->getOptions(), $id);
     }
 
     public function setId(string $id): void
@@ -163,5 +160,20 @@ class Subscription
         }
 
         $this->getSession()->sendMessage($msg);
+    }
+
+    public function getMatch(): string
+    {
+        return $this->options->match ?? 'exact';
+    }
+
+    public function toArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'session' => $this->session->getSessionId(),
+            'uri' => $this->uri,
+            'options' => (array) $this->options
+        ];
     }
 }

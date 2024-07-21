@@ -16,6 +16,8 @@ interface AdapterInterface extends \Octamp\Server\Adapter\AdapterInterface
 
     public function setField(string $key, string $field, mixed $data): void;
 
+    public function getField(string $key, string $field): mixed;
+
     public function del(string $key, array $fields = []): void;
 
     public function get(string $key, array $fields = []): ?array;
