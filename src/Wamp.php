@@ -22,6 +22,7 @@ use Octamp\Wamp\Serializer\DeserializationException;
 use Octamp\Wamp\Serializer\JsonSerializer;
 use Octamp\Wamp\Serializer\MessagePackSerializer;
 use Octamp\Wamp\Serializer\WampMessageSerializerInterface;
+use Octamp\Wamp\Session\Session;
 use Octamp\Wamp\Session\SessionStorage;
 use Octamp\Wamp\Transport\OctampTransport;
 use Octamp\Wamp\Transport\OctampTransportProvider;
@@ -31,6 +32,7 @@ use OpenSwoole\Http\Response;
 use OpenSwoole\WebSocket\Frame;
 use Symfony\Component\EventDispatcher\EventDispatcher;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Thruway\Message\Message;
 
 class Wamp
 {
@@ -102,8 +104,15 @@ class Wamp
             $realm = $this->realmManager->createRealm('realm1', $router);
             $realm->setConnection($connection);
             $realm->getMetaSession();
-
             $this->realmManager->addRealm($realm);
+
+            $this->adapter->subscribe('forward:message', function (string $serverId, string $transportId, string $data) use ($sessionStorage) {
+                if ($this->serverId === $serverId) {
+                    $session = $sessionStorage->getSessionUsingTransportId($transportId);
+                    $message = Message::createMessageFromArray(json_decode($data));
+                    $this->realmManager->dispatch($session, $message);
+                }
+            });
         });
 
         $transportProvider->getServer()->on('handshake', function (Server $server, Request $request, Response $response) {

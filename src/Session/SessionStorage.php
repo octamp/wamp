@@ -13,6 +13,7 @@ use Octamp\Wamp\Session\Adapter\AdapterInterface;
 use Octamp\Wamp\Transport\AbstractTransport;
 use Octamp\Wamp\Transport\DummyTransport;
 use Octamp\Wamp\Transport\OctampTransport;
+use Thruway\Message\HelloMessage;
 
 class SessionStorage
 {
@@ -91,6 +92,13 @@ class SessionStorage
         $session->setAuthenticated($data['authenticated']);
         $session->setRealm($realm);
         $session->setTrusted($data['trusted']);
+
+        if(isset($data['helloMessage'])) {
+            $helloMessage = HelloMessage::createMessageFromArray($data['helloMessage']);
+            if ($helloMessage instanceof HelloMessage) {
+                $session->setHelloMessage($helloMessage);
+            }
+        }
 
         return $session;
     }

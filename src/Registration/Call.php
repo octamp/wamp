@@ -40,11 +40,6 @@ class Call
     private ?CancelMessage $cancelMessage = null;
 
     /**
-     * @var boolean
-     */
-    private bool $isProgressive = false;
-
-    /**
      * @var Registration
      */
     private ?Registration $registration = null;
@@ -286,12 +281,9 @@ class Call
                 }
             }
 
-            // TODO: check to see if callee supports progressive call
-            $callOptions   = $this->getCallMessage()->getOptions();
-            $isProgressive = false;
-            if (is_object($callOptions) && isset($callOptions->receive_progress) && $callOptions->receive_progress) {
+            $calleeSupportReceiveProgress = $this->calleeSession->hasFeature('callee', 'progressive_call_results');
+            if ($calleeSupportReceiveProgress && $this->isProgressive()) {
                 $details = array_merge($details, ["receive_progress" => true]);
-                $isProgressive = true;
             }
 
             // if nothing was added to details - change ot stdClass so it will serialize correctly
@@ -299,9 +291,6 @@ class Call
                 $details = new \stdClass();
             }
             $invocationMessage->setDetails($details);
-
-            $this->setIsProgressive($isProgressive);
-
             $this->setInvocationMessage($invocationMessage);
         }
 
@@ -319,23 +308,13 @@ class Call
     }
 
     /**
-     * update state is progressive
-     *
-     * @param boolean $isProgressive
-     */
-    public function setIsProgressive(bool $isProgressive): void
-    {
-        $this->isProgressive = $isProgressive;
-    }
-
-    /**
      * Get state is progressive
      *
      * @return boolean
      */
     public function getIsProgressive(): bool
     {
-        return $this->isProgressive;
+        return $this->isProgressive();
     }
 
     /**
@@ -345,7 +324,7 @@ class Call
      */
     public function isProgressive(): bool
     {
-        return $this->isProgressive;
+        return $this->callMessage?->getOptions()?->receive_progress ?? false;
     }
 
     /**

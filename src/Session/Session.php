@@ -215,6 +215,16 @@ class Session
         return $this->getHelloMessage()->getDetails()?->roles ?? [];
     }
 
+    public function hasFeature(string $role, string $feature): bool
+    {
+        $roles = $this->getRoleFeatures();
+        if (!isset($roles[$role])) {
+            return false;
+        }
+
+        return $roles[$role]->features->{$feature} ?? false;
+    }
+
     public function incPendingCallCount(): int
     {
         return $this->pendingCallCount++;

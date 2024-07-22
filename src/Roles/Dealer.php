@@ -54,8 +54,6 @@ class Dealer extends AbstractRole implements RoleInterface
 
     public function onYieldMessage(Session $session, YieldMessage $message): void
     {
-        $details   = new \stdClass();
-
         $invocationKey = Registration::generateKeyForInvocation('*', $session->getSessionId(), '*', $message->getRequestId());
         $invocationDetails = $this->adapter->findOne($invocationKey);
 
@@ -76,15 +74,29 @@ class Dealer extends AbstractRole implements RoleInterface
             $message->getRequestId()
         );
 
+        $callerSession = $this->sessionStorage->getSessionUsingTransportId($invocationDetails['callTransportId']);
+
+        $isProgress = $message->getOptions()?->progress ?? false;
+        $callIsProgressive = $invocationDetails['isProgressive'] ?? false;
+        if ($isProgress && $callIsProgressive && $callerSession->hasFeature('caller', 'progressive_call_results')) {
+            $resultMessage = new ResultMessage(
+                (int) $invocationDetails['callRequestId'],
+                ['progress' => true],
+                $message->getArguments(),
+                $message->getArgumentsKw()
+            );
+            $callerSession?->sendMessage($resultMessage);
+            return;
+        }
+
         $this->adapter->setField($invocationKey, 'hasResponse', true);
         $resultMessage = new ResultMessage(
             (int) $invocationDetails['callRequestId'],
-            $details,
+            [],
             $message->getArguments(),
             $message->getArgumentsKw()
         );
 
-        $callerSession = $this->sessionStorage->getSessionUsingTransportId($invocationDetails['callTransportId']);
         $callerSession?->sendMessage($resultMessage);
         $this->adapter->setField($invocationKey, 'hasSentResult', true);
 
@@ -285,6 +297,10 @@ class Dealer extends AbstractRole implements RoleInterface
 
     public function getFeatures(): object
     {
-        return new \stdClass();
+        $features = new \stdClass();
+        $features->shared_registration = true;
+        $features->progressive_call_results = true;
+
+        return $features;
     }
 }

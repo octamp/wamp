@@ -20,7 +20,7 @@ use Thruway\Message\RegisterMessage;
 class Registration
 {
 
-    private string $id;
+    private string|int $id;
 
     private Session $session;
 
@@ -69,9 +69,9 @@ class Registration
     private int $maxSimultaneousCalls;
 
     /**
-     * @var int
+     * @var float
      */
-    private int $invocationAverageTime;
+    private float $invocationAverageTime;
 
     /**
      * @var null|\DateTime
@@ -235,6 +235,7 @@ class Registration
             'calleeTransportId' => $call->getCalleeSession()->getTransportId(),
             'invocationId' => $invocationMessage->getRequestId(),
             'registrationId' => $invocationMessage->getRegistrationId(),
+            'isProgressive' => $call->isProgressive(),
             'hasResponse' => false,
             'hasSentResult' => false,
         ]);
@@ -336,7 +337,7 @@ class Registration
         }
     }
 
-    public function setId(int $id): void
+    public function setId(string|int $id): void
     {
         $this->id = $id;
     }

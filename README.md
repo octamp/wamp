@@ -133,20 +133,23 @@ That will now run the server
 
 ### RPC Features
 
-| Feature                          | Status  |
-|----------------------------------|---------|
-| Progressive Call Results         | &cross; |
-| Progressive Call Invocations     | &cross; |
-| Call Timeout                     | &cross; |
-| Call Canceling                   | &cross; |
-| Caller Identification            | &cross; |
-| Call Trustlevels                 | &cross; |
-| Registration Meta API            | &cross; |
-| Pattern-based Registration       | &cross; |
-| Shared Registration              | &cross; |
-| Sharded Registration             | &cross; |
-| Registration Revocation          | &cross; |
-| (Interface) Procedure Reflection | &cross; |
+| Feature                                        | Status  |
+|------------------------------------------------|---------|
+| Progressive Call Results                       | &check; |
+| Ignoring Requests for Progressive Call Results | &cross; |
+| Progressive Call Results with Timeout          | &cross; |
+| Progressive Call Invocations                   | &cross; |
+| Call Timeout                                   | &cross; |
+| Call Canceling                                 | &cross; |
+| Call Re-Routing                                | &cross; |
+| Caller Identification                          | &cross; |
+| Call Trustlevels                               | &cross; |
+| Registration Meta API                          | &cross; |
+| Pattern-based Registration                     | &cross; |
+| Shared Registration                            | &check; |
+| Sharded Registration                           | &cross; |
+| Registration Revocation                        | &cross; |
+| (Interface) Procedure Reflection               | &cross; |
 
 
 ### PubSub Features
@@ -161,6 +164,9 @@ That will now run the server
 | Pattern-based Subscription    | &check; |
 | Sharded Subscription          | &cross; |
 | Event History                 | &cross; |
+| Event Retention               | &cross; |
+| Subscription Revocation       | &cross; |
+| Session Testament             | &cross; |
 | (Interface) Topic Reflection  | &cross; |
 
 ### Others
