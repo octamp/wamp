@@ -7,13 +7,13 @@ namespace Octamp\Wamp\Roles;
 use Octamp\Wamp\Adapter\AdapterInterface;
 use Octamp\Wamp\Event\LeaveRealmEvent;
 use Octamp\Wamp\Matcher\Matcher;
-use Octamp\Wamp\Registration\Call;
 use Octamp\Wamp\Registration\Procedure;
 use Octamp\Wamp\Registration\Registration;
 use Octamp\Wamp\Session\Session;
 use Octamp\Wamp\Session\SessionStorage;
 use Thruway\Common\Utils;
 use Thruway\Message\CallMessage;
+use Thruway\Message\CancelMessage;
 use Thruway\Message\ErrorMessage;
 use Thruway\Message\InterruptMessage;
 use Thruway\Message\Message;
@@ -36,6 +36,49 @@ class Dealer extends AbstractRole implements RoleInterface
         $this->registrationsBySession = new \SplObjectStorage();
     }
 
+    public function onCancelMessage(Session $session, CancelMessage $message): void
+    {
+        $mode = $message->getOptions()->mode ?? 'skip';
+        $invocationKey = Registration::generateKeyForInvocation($session->getSessionId(), '*',  '*', '*', $message->getRequestId());
+        $invocationDetails = $this->adapter->findOne($invocationKey);
+        if ($invocationDetails === null) {
+            return;
+        }
+        $invocationKey = Registration::generateKeyForInvocation(
+            $invocationDetails['callSessionId'],
+            $session->getSessionId(),
+            $invocationDetails['registrationId'],
+            $invocationDetails['invocationId'],
+            $message->getRequestId(),
+        );
+
+        if ($invocationDetails['cancelled']) {
+            return;
+        }
+
+        if ($invocationDetails['hasResponse'] ||  $invocationDetails['hasSentResult']) {
+            return;
+        }
+
+        $this->adapter->setField($invocationKey, 'cancelled', true);
+        $this->adapter->setField($invocationKey, 'cancelMode', $mode);
+
+        $callerSession = $this->sessionStorage->getSessionUsingTransportId($invocationDetails['callTransportId']);
+        $calleeSession = $this->sessionStorage->getSessionUsingTransportId($invocationDetails['calleeTransportId']);
+        if (!$calleeSession->hasFeature('callee', 'call_canceling')) {
+            $mode = 'skip';
+        }
+
+        if ($mode === 'kill') {
+            $calleeSession->sendMessage(new InterruptMessage($invocationDetails['invocationId'], new \stdClass()));
+        } elseif ($mode === 'killnowait') {
+            $callerSession->sendMessage(new ErrorMessage(Message::MSG_CALL, $message->getRequestId()));
+            $callerSession->sendMessage(new InterruptMessage($invocationDetails['invocationId'], new \stdClass()));
+        } else {
+            $callerSession->sendMessage(new ErrorMessage(Message::MSG_CALL, $message->getRequestId()));
+        }
+    }
+
     public function onCallMessage(Session $session, CallMessage $message): void
     {
         if (!Utils::uriIsValid($message->getUri())) {
@@ -54,7 +97,7 @@ class Dealer extends AbstractRole implements RoleInterface
 
     public function onYieldMessage(Session $session, YieldMessage $message): void
     {
-        $invocationKey = Registration::generateKeyForInvocation('*', $session->getSessionId(), '*', $message->getRequestId());
+        $invocationKey = Registration::generateKeyForInvocation('*', $session->getSessionId(), '*', $message->getRequestId(), '*');
         $invocationDetails = $this->adapter->findOne($invocationKey);
 
         if ($invocationDetails === null) {
@@ -71,34 +114,37 @@ class Dealer extends AbstractRole implements RoleInterface
             $invocationDetails['callSessionId'],
             $session->getSessionId(),
             $invocationDetails['registrationId'],
-            $message->getRequestId()
+            $message->getRequestId(),
+            $invocationDetails['callRequestId']
         );
 
-        $callerSession = $this->sessionStorage->getSessionUsingTransportId($invocationDetails['callTransportId']);
+        if (!$invocationDetails['cancelled']) {
+            $callerSession = $this->sessionStorage->getSessionUsingTransportId($invocationDetails['callTransportId']);
 
-        $isProgress = $message->getOptions()?->progress ?? false;
-        $callIsProgressive = $invocationDetails['isProgressive'] ?? false;
-        if ($isProgress && $callIsProgressive && $callerSession->hasFeature('caller', 'progressive_call_results')) {
+            $isProgress = $message->getOptions()?->progress ?? false;
+            $callIsProgressive = $invocationDetails['isProgressive'] ?? false;
+            if ($isProgress && $callIsProgressive && $callerSession->hasFeature('caller', 'progressive_call_results')) {
+                $resultMessage = new ResultMessage(
+                    (int) $invocationDetails['callRequestId'],
+                    ['progress' => true],
+                    $message->getArguments(),
+                    $message->getArgumentsKw()
+                );
+                $callerSession?->sendMessage($resultMessage);
+                return;
+            }
+
+            $this->adapter->setField($invocationKey, 'hasResponse', true);
             $resultMessage = new ResultMessage(
                 (int) $invocationDetails['callRequestId'],
-                ['progress' => true],
+                [],
                 $message->getArguments(),
                 $message->getArgumentsKw()
             );
+
             $callerSession?->sendMessage($resultMessage);
-            return;
+            $this->adapter->setField($invocationKey, 'hasSentResult', true);
         }
-
-        $this->adapter->setField($invocationKey, 'hasResponse', true);
-        $resultMessage = new ResultMessage(
-            (int) $invocationDetails['callRequestId'],
-            [],
-            $message->getArguments(),
-            $message->getArgumentsKw()
-        );
-
-        $callerSession?->sendMessage($resultMessage);
-        $this->adapter->setField($invocationKey, 'hasSentResult', true);
 
         $this->removeCall($invocationKey);
     }
@@ -212,7 +258,7 @@ class Dealer extends AbstractRole implements RoleInterface
 
     protected function processInvocationError(Session $session, ErrorMessage $message)
     {
-        $key = Registration::generateKeyForInvocation('*', $session->getSessionId(), '*', $message->getRequestId());
+        $key = Registration::generateKeyForInvocation('*', $session->getSessionId(), '*', $message->getRequestId(), '*');
         $details = $this->adapter->findOne($key);
         if ($details === null) {
             $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($message, 'wamp.error.no_such_procedure'));
@@ -229,21 +275,24 @@ class Dealer extends AbstractRole implements RoleInterface
             $details['callSessionId'],
             $session->getSessionId(),
             $details['registrationId'],
-            $message->getRequestId()
+            $message->getRequestId(),
+            $details['callRequestId']
         );
         $this->removeCall($key);
 
-        $errorMessage = new ErrorMessage(
-            Message::MSG_CALL,
-            $details['callRequestId'],
-            $message->getDetails(),
-            $message->getErrorURI(),
-            $message->getArguments(),
-            $message->getArgumentsKw()
-        );
+        if (!$details['cancelled'] || ($details['cancelled'] && $details['cancelMode'] === 'kill')) {
+            $errorMessage = new ErrorMessage(
+                Message::MSG_CALL,
+                $details['callRequestId'],
+                $message->getDetails(),
+                $message->getErrorURI(),
+                $message->getArguments(),
+                $message->getArgumentsKw()
+            );
 
-        $callerSession = $this->sessionStorage->getSessionUsingTransportId($details['callTransportId']);
-        $callerSession->sendMessage($errorMessage);
+            $callerSession = $this->sessionStorage->getSessionUsingTransportId($details['callTransportId']);
+            $callerSession->sendMessage($errorMessage);
+        }
     }
 
     protected function getRegistrationById(Session $session, int $registrationId): ?Registration
@@ -300,6 +349,7 @@ class Dealer extends AbstractRole implements RoleInterface
         $features = new \stdClass();
         $features->shared_registration = true;
         $features->progressive_call_results = true;
+        $features->call_canceling = true;
 
         return $features;
     }

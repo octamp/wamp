@@ -140,7 +140,7 @@ That will now run the server
 | Progressive Call Results with Timeout          | &cross; |
 | Progressive Call Invocations                   | &cross; |
 | Call Timeout                                   | &cross; |
-| Call Canceling                                 | &cross; |
+| Call Canceling                                 | &check; |
 | Call Re-Routing                                | &cross; |
 | Caller Identification                          | &cross; |
 | Call Trustlevels                               | &cross; |

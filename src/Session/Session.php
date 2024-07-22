@@ -6,7 +6,6 @@ namespace Octamp\Wamp\Session;
 
 use Octamp\Client\Promise\Promise;
 use Octamp\Wamp\Auth\AuthenticationDetails;
-use Octamp\Wamp\Auth\Event\ResultMessageEvent;
 use Octamp\Wamp\Connection\Event\SendMessageEvent;
 use Octamp\Wamp\Connection\WithEventDispatcherInterface;
 use Octamp\Wamp\Event\LeaveRealmEvent;
@@ -16,7 +15,6 @@ use Octamp\Wamp\Session\Adapter\AdapterInterface;
 use Octamp\Wamp\Session\Event\MessageEvent;
 use Octamp\Wamp\Transport\AbstractTransport;
 use Thruway\Message\AbortMessage;
-use Thruway\Message\CallMessage;
 use Thruway\Message\HelloMessage;
 use Thruway\Message\Message;
 

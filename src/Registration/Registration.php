@@ -224,7 +224,8 @@ class Registration
             $call->getCallerSession()->getSessionId(),
             $call->getCalleeSession()->getSessionId(),
             $call->getRegistration()->getId(),
-            $invocationMessage->getRequestId()
+            $invocationMessage->getRequestId(),
+            $call->getCallMessage()->getRequestId()
         );
 
         $this->adapter->set($key, [
@@ -238,19 +239,22 @@ class Registration
             'isProgressive' => $call->isProgressive(),
             'hasResponse' => false,
             'hasSentResult' => false,
+            'cancelled' => false,
+            'cancelMode' => 'skip',
         ]);
 
         $this->getSession()->sendMessage($invocationMessage);
     }
 
-    public static function generateKeyForInvocation(string|int $callerId, string|int $calleeId, string|int $registrationId, string|int $requestId)
+    public static function generateKeyForInvocation(string|int $callerId, string|int $calleeId, string|int $registrationId, string|int $requestId, string|int $callRequestId): string
     {
         return sprintf(
-            'invoc:%s:%s:%s:%s',
+            'invoc:%s:%s:%s:%s:%s',
             $callerId,
             $calleeId,
             $registrationId,
-            $requestId
+            $requestId,
+            $callRequestId
         );
     }
 
