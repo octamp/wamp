@@ -6,6 +6,7 @@ namespace Octamp\Wamp\Registration;
 
 use Octamp\Wamp\Adapter\AdapterInterface;
 use Octamp\Wamp\Helper\IDHelper;
+use Octamp\Wamp\Realm\Realm;
 use Octamp\Wamp\Session\Session;
 use Octamp\Wamp\Session\SessionStorage;
 use Thruway\Common\Utils;
@@ -241,6 +242,8 @@ class Registration
             'hasSentResult' => false,
             'cancelled' => false,
             'cancelMode' => 'skip',
+            'callerRealm' => $call->getCallerSession()->getRealm()->name,
+            'calleeRealm' => $call->getCalleeSession()->getRealm()->name,
         ]);
 
         $this->getSession()->sendMessage($invocationMessage);
@@ -344,6 +347,11 @@ class Registration
     public function setId(string|int $id): void
     {
         $this->id = $id;
+    }
+
+    public function getRealm(): Realm
+    {
+        return $this->session->getRealm();
     }
 
     public function getStatistics(): array

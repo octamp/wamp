@@ -7,6 +7,7 @@ namespace Octamp\Wamp\Roles;
 use Octamp\Wamp\Adapter\AdapterInterface;
 use Octamp\Wamp\Event\LeaveRealmEvent;
 use Octamp\Wamp\Matcher\Matcher;
+use Octamp\Wamp\Realm\Realm;
 use Octamp\Wamp\Registration\Procedure;
 use Octamp\Wamp\Registration\Registration;
 use Octamp\Wamp\Session\Session;
@@ -86,12 +87,12 @@ class Dealer extends AbstractRole implements RoleInterface
             return;
         }
 
-        if (!$this->hasProcedure($message->getProcedureName())) {
+        if (!$this->hasProcedure($session->getRealm()->getRealmName(), $message->getProcedureName())) {
             $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($message, 'wamp.error.no_such_procedure'));
             return;
         }
 
-        $procedure = $this->getProcedure($message->getProcedureName());
+        $procedure = $this->getProcedure($session->getRealm()->name, $message->getProcedureName());
         $procedure->processCallMessage($session, $message);
     }
 
@@ -157,15 +158,18 @@ class Dealer extends AbstractRole implements RoleInterface
     public function onRegisterMessage(Session $session, RegisterMessage $message): void
     {
         $procedureName = $message->getProcedureName();
-        $exists = $this->procedureExists($procedureName, true);
+        $globalName = Procedure::generateGlobalName($session->getRealm()->getRealmName(), $procedureName);
+        $exists = $this->procedureExists($globalName, true);
         if (!$exists) {
-            $this->adapter->lock('proc:' . $procedureName . ':lock', $procedureName, 2, 2);
+            $this->adapter->lock('proc:' . $globalName . ':lock', $procedureName, 2, 2);
         }
         $registration = Registration::createRegistrationFromRegisterMessage($session, $message, $this->adapter);
-        $procedure = $this->getProcedure($procedureName, $registration);
+
+        $procedure = $this->getProcedure($session->getRealm()->getRealmName(), $procedureName, $registration);
         $this->saveProcedure($procedure);
+
         if (!$exists) {
-            $this->adapter->unlock('proc:' . $procedureName . ':lock', $procedureName);
+            $this->adapter->unlock('proc:' . $globalName . ':lock', $procedureName);
         }
         $procedure->processRegister($session, $message, $registration)->then(function ($result) use($procedure) {
             if ($result) {
@@ -174,24 +178,27 @@ class Dealer extends AbstractRole implements RoleInterface
         });
     }
 
-    protected function hasProcedure(string $procedureName): bool
+    protected function hasProcedure(string $realm, string $procedureName): bool
     {
-        if (isset($this->procedures[$procedureName])) {
+        $globalProcedureName = Procedure::generateGlobalName($realm, $procedureName);
+
+        if (isset($this->procedures[$globalProcedureName])) {
             return true;
         }
 
-        return $this->adapter->exists('proc:' . $procedureName);
+        return $this->adapter->exists('proc:' . $globalProcedureName);
     }
 
-    protected function getProcedure(string $procedureName, ?Registration $registration = null): Procedure
+    protected function getProcedure(string $realm, string $procedureName, ?Registration $registration = null): Procedure
     {
-        if (isset($this->procedures[$procedureName])) {
-            return $this->procedures[$procedureName];
+        $globalProcedureName = Procedure::generateGlobalName($realm, $procedureName);
+        if (isset($this->procedures[$globalProcedureName])) {
+            return $this->procedures[$globalProcedureName];
         }
 
-        $procedureRaw = $this->adapter->get('proc:' . $procedureName);
+        $procedureRaw = $this->adapter->get('proc:' . $globalProcedureName);
         if ($procedureRaw === null) {
-            $procedure = new Procedure($this->adapter, $this->sessionStorage, $procedureName);
+            $procedure = new Procedure($this->adapter, $this->sessionStorage, $realm, $procedureName);
             if ($registration !== null) {
                 $procedure->setDiscloseCaller($registration->getDiscloseCaller());
                 $procedure->setInvokeType($registration->getInvokeType());
@@ -200,7 +207,7 @@ class Dealer extends AbstractRole implements RoleInterface
             return $procedure;
         }
 
-        $procedure = new Procedure($this->adapter, $this->sessionStorage, $procedureName, false);
+        $procedure = new Procedure($this->adapter, $this->sessionStorage, $realm, $procedureName, false);
         $procedure->setDiscloseCaller($procedureRaw['discloseCaller']);
         $procedure->setAllowMultipleRegistrations($procedureRaw['allowMultipleRegistrations']);
         $procedure->setInvokeType($procedureRaw['invokeType']);
@@ -214,22 +221,23 @@ class Dealer extends AbstractRole implements RoleInterface
 
     protected function saveProcedure(Procedure $procedure): void
     {
-        $this->procedures[$procedure->getProcedureName()] = $procedure;
-        $this->adapter->set('proc:' . $procedure->getProcedureName(), [
+        $this->procedures[$procedure->getGlobalName()] = $procedure;
+        $this->adapter->set('proc:' . $procedure->getGlobalName(), [
             'discloseCaller' => $procedure->getDiscloseCaller(),
             'allowMultipleRegistrations' => $procedure->getAllowMultipleRegistrations(),
             'invokeType' => $procedure->getInvokeType(),
             'lastCallIndex' => -1,
+            'realm' => $procedure->getRealmName(),
         ]);
     }
 
-    protected function procedureExists(string $name, bool $global = false): bool
+    protected function procedureExists(string $hash, bool $global = false): bool
     {
         if ($global) {
-            return $this->adapter->exists($name);
+            return $this->adapter->exists('proc:' . $hash);
         }
 
-        return isset($this->procedures[$name]);
+        return isset($this->procedures[$hash]);
     }
 
     public function onUnregisterMessage(Session $session, UnregisterMessage $message): void
@@ -239,24 +247,24 @@ class Dealer extends AbstractRole implements RoleInterface
             $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($message, 'wamp.error.no_such_procedure'));
             return;
         }
-        $procedure = $this->getProcedure($registration->getProcedureName());
+        $procedure = $this->getProcedure($session->getRealm()->getRealmName(), $registration->getProcedureName());
         if ($procedure == null) {
             $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($message, 'wamp.error.no_such_procedure'));
             return;
         }
 
         $procedure->processUnregister($session, $message);
-        $this->tryDeleteProcedure($registration->getProcedureName());
+        $this->tryDeleteProcedure($session->getRealm(), $registration->getProcedureName());
     }
 
-    public function onErrorMessage(Session $session, ErrorMessage $message)
+    public function onErrorMessage(Session $session, ErrorMessage $message): void
     {
         if ($message->getErrorMsgCode() === Message::MSG_INVOCATION) {
             $this->processInvocationError($session, $message);
         }
     }
 
-    protected function processInvocationError(Session $session, ErrorMessage $message)
+    protected function processInvocationError(Session $session, ErrorMessage $message): void
     {
         $key = Registration::generateKeyForInvocation('*', $session->getSessionId(), '*', $message->getRequestId(), '*');
         $details = $this->adapter->findOne($key);
@@ -314,10 +322,10 @@ class Dealer extends AbstractRole implements RoleInterface
         $procedureNames = array_keys($this->procedures);
         foreach ($procedureNames as $name) {
             $this->procedures[$name]->leave($session);
-            $this->tryDeleteProcedure($name);
+            $this->tryDeleteProcedure($session->getRealm(), $name);
         }
 
-        $search = Registration::generateKeyForInvocation($session->getSessionId(), '*', '*', '*');
+        $search = Registration::generateKeyForInvocation($session->getSessionId(), '*', '*', '*', '*');
         $results = $this->adapter->findWithRetainKey($search);
         foreach ($results as $key => $result) {
             $this->adapter->del($key);
@@ -326,16 +334,17 @@ class Dealer extends AbstractRole implements RoleInterface
         }
     }
 
-    public function tryDeleteProcedure(string $name): void
+    public function tryDeleteProcedure(Realm $realm, string $name): void
     {
-        if (!$this->procedures[$name]->hasRegistrations(true)) {
-            $this->adapter->del('proc:' . $name);
-            $this->adapter->del('proc:' . $name . ':regs');
-            $this->adapter->del('proc:' . $name . ':lock');
+        $procedureName = Procedure::generateGlobalName($realm->name, $name);
+        if (!$this->procedures[$procedureName]->hasRegistrations(true)) {
+            $this->adapter->del('proc:' . $procedureName);
+            $this->adapter->del('proc:' . $procedureName . ':regs');
+            $this->adapter->del('proc:' . $procedureName . ':lock');
 
-            unset($this->procedures[$name]);
-        } elseif (!$this->procedures[$name]->hasRegistrations(false)) {
-            unset($this->procedures[$name]);
+            unset($this->procedures[$procedureName]);
+        } elseif (!$this->procedures[$procedureName]->hasRegistrations(false)) {
+            unset($this->procedures[$procedureName]);
         }
     }
 

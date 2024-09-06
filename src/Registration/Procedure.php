@@ -39,7 +39,7 @@ class Procedure
      *
      * @param string $procedureName
      */
-    public function __construct(protected AdapterInterface $adapter, protected SessionStorage $sessionStorage, string $procedureName, public bool $processSets = true)
+    public function __construct(protected AdapterInterface $adapter, protected SessionStorage $sessionStorage, private string $realmName, string $procedureName, public bool $processSets = true)
     {
         $this->setProcedureName($procedureName);
 
@@ -166,11 +166,12 @@ class Procedure
 
         $session = $registration->getSession();
         $id =  $session->getTransportId() . ':' . $registration->getId();
-        $this->adapter->setField('proc:' . $this->getProcedureName() . ':regs', $id, [
+        $this->adapter->setField('proc:' . $this->getGlobalName() . ':regs', $id, [
             'id' => $registration->getId(),
             'sessionId' => $session->getId(),
             'transportId' => $session->getTransportId(),
             'message' => $message->getMessageParts(),
+            'realm' => $registration->getRealm()->getRealmName(),
         ]);
     }
 
@@ -193,7 +194,7 @@ class Procedure
             return $this->registrations[$key];
         }
 
-        $procedureRegKey = 'proc:' . $this->procedureName . ':regs';
+        $procedureRegKey = 'proc:' . $this->getGlobalName() . ':regs';
         $result = $this->adapter->get($procedureRegKey, [$key]);
 
         $registrationRaw = $result[$key] ?? null;
@@ -213,7 +214,7 @@ class Procedure
         }
         $key = $session->getTransportId() . ':' . $registration->getId();
         unset($this->registrations[$key]);
-        $this->adapter->del('proc:' . $this->getProcedureName() . ':regs', [$key]);
+        $this->adapter->del('proc:' . $this->getGlobalName() . ':regs', [$key]);
 
         Coroutine::create(function () use ($session, $msg) {
             $this->cancelCalls($session, $msg->getRegistrationId());
@@ -285,7 +286,7 @@ class Procedure
     public function hasRegistrations(bool $global = true): bool
     {
         if ($global) {
-            $registrations = $this->adapter->hkeys('proc:' . $this->procedureName . ':regs');
+            $registrations = $this->adapter->hkeys('proc:' . $this->getGlobalName() . ':regs');
 
             return !empty($registrations);
         }
@@ -295,7 +296,7 @@ class Procedure
 
     public function getFirstRegistration(): ?Registration
     {
-        $procedureRegKey = 'proc:' . $this->procedureName . ':regs';
+        $procedureRegKey = 'proc:' . $this->getGlobalName() . ':regs';
         $keys = $this->adapter->hkeys($procedureRegKey);
         if (count($keys) === 0) {
             return null;
@@ -306,7 +307,7 @@ class Procedure
 
     public function getLastRegistration(): ?Registration
     {
-        $keys = $this->adapter->hkeys('proc:' . $this->procedureName . ':regs');
+        $keys = $this->adapter->hkeys('proc:' . $this->getGlobalName() . ':regs');
         if (count($keys) === 0) {
             return null;
         }
@@ -318,7 +319,7 @@ class Procedure
 
     public function getRandomRegistration(): ?Registration
     {
-        $keys = $this->adapter->get('proc:' . $this->procedureName . ':regs');
+        $keys = $this->adapter->get('proc:' . $this->getGlobalName() . ':regs');
         if (count($keys) === 0) {
             return null;
         }
@@ -330,13 +331,13 @@ class Procedure
 
     public function getRoundRobinRegistration(): ?Registration
     {
-        $index = $this->adapter->inc('proc:' . $this->procedureName, 1, 'lastCallIndex');
-        $totalRegistration = $this->adapter->countFields('proc:' . $this->procedureName . ':regs');
+        $index = $this->adapter->inc('proc:' . $this->getGlobalName(), 1, 'lastCallIndex');
+        $totalRegistration = $this->adapter->countFields('proc:' . $this->getGlobalName() . ':regs');
         if ($index >= $totalRegistration) {
             $index = 0;
-            $this->adapter->setField('proc:' . $this->procedureName, 'lastCallIndex', 0);
+            $this->adapter->setField('proc:' . $this->getGlobalName(), 'lastCallIndex', 0);
         }
-        $keys = $this->adapter->hkeys('proc:' . $this->procedureName . ':regs');
+        $keys = $this->adapter->hkeys('proc:' . $this->getGlobalName() . ':regs');
         if (count($keys) === 0) {
             return null;
         }
@@ -429,7 +430,7 @@ class Procedure
 
             $key = $session->getTransportId() . ':' . $registration->getId();
             unset($this->registrations[$key]);
-            $this->adapter->del('proc:' . $this->getProcedureName() . ':regs', [$key]);
+            $this->adapter->del('proc:' . $this->getGlobalName() . ':regs', [$key]);
 
             Coroutine::create(function () use ($session, $registration) {
                 $this->cancelCalls($session, $registration->getId());
@@ -439,7 +440,7 @@ class Procedure
 
     protected function cancelCalls(Session $session, string|int $registrationId): array
     {
-        $key = Registration::generateKeyForInvocation('*', $session->getSessionId(), $registrationId, '*');
+        $key = Registration::generateKeyForInvocation('*', $session->getSessionId(), $registrationId, '*', '*');
         $results = $this->adapter->find($key);
 
         foreach ($results as $result) {
@@ -447,7 +448,8 @@ class Procedure
                 $result['callSessionId'],
                 $session->getSessionId(),
                 $registrationId,
-                $result['invocationId']
+                $result['invocationId'],
+                $result['callRequestId']
             );
             $this->adapter->del($id);
             $callerSession = $this->sessionStorage->getSessionUsingTransportId($result['callTransportId']);
@@ -480,5 +482,20 @@ class Procedure
                 "statistics" => $reg->getStatistics()
             ];
         }
+    }
+
+    public function getRealmName(): string
+    {
+        return $this->realmName;
+    }
+
+    public function getGlobalName(): string
+    {
+        return static::generateGlobalName($this->getRealmName(), $this->getProcedureName());
+    }
+
+    public static function generateGlobalName(string $realmName, string $name): string
+    {
+        return $realmName . ':' . $name;
     }
 }

@@ -87,4 +87,9 @@ class Realm
     {
         $this->connection = $connection;
     }
+
+    public function getRealmName(): string
+    {
+        return $this->name;
+    }
 }
