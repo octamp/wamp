@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Octamp\Wamp\Subscription;
 
 use Octamp\Wamp\Helper\IDHelper;
+use Octamp\Wamp\Realm\Realm;
 use Octamp\Wamp\Session\Session;
 use Thruway\Common\Utils;
 use Thruway\Message\EventMessage;
@@ -44,6 +45,11 @@ class Subscription
             $this->setDisclosePublisher(true);
         }
 
+    }
+
+    public function getRealm(): Realm
+    {
+        return $this->getSession()->getRealm();
     }
 
     public static function createSubscriptionFromSubscribeMessage(Session $session, SubscribeMessage $msg, ?string $id = null): static

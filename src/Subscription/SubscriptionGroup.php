@@ -17,7 +17,7 @@ class SubscriptionGroup
     protected object $options;
     protected ?string $hash = null;
 
-    public function __construct(protected MatchInterface $matcher, protected string $uri, array|object $options, protected AdapterInterface $adapter, protected SessionStorage $sessionStorage, protected string $serverId)
+    public function __construct(protected MatchInterface $matcher, protected string $realmName, protected string $uri, array|object $options, protected AdapterInterface $adapter, protected SessionStorage $sessionStorage, protected string $serverId)
     {
         $this->options = (object) $options;
     }
@@ -33,7 +33,7 @@ class SubscriptionGroup
             return false;
         }
 
-        return $this->hash() === static::generateHash($subscription->getUri(), $subscription->getOptions());
+        return $this->hash() === static::generateHash($subscription->getRealm()->name, $subscription->getUri(), $subscription->getOptions());
     }
 
     public function isPublishMatch(PublishMessage $message): bool
@@ -44,12 +44,14 @@ class SubscriptionGroup
     public function addSubscription(Subscription $subscription): void
     {
         $this->subscriptions[$subscription->getId()] = $subscription;
+        $realm = $subscription->getSession()->getRealm();
 
-        $this->adapter->setField('sub:' . $this->hash, $subscription->getId(), [
+        $this->adapter->setField('sub:' . $this->hash(), $subscription->getId(), [
             'sessionId' => $subscription->getSession()->getId(),
             'transportId' => $subscription->getSession()->getTransportId(),
             'subscriptionId' => $subscription->getId(),
             'subscription' => $subscription->toArray(),
+            'realm' => $realm->name,
         ]);
     }
 
@@ -59,13 +61,14 @@ class SubscriptionGroup
             'match' => $this->matcher->getName(),
             'uri' => $this->uri,
             'options' => (array) $this->options,
+            'realm' => $this->realmName,
         ]);
     }
 
     public function hash(): string
     {
         if ($this->hash === null) {
-            $this->hash = static::generateHash($this->uri, $this->options);
+            $this->hash = static::generateHash($this->realmName, $this->uri, $this->options);
         }
 
         return $this->hash;
@@ -188,8 +191,13 @@ class SubscriptionGroup
         return empty($this->subscriptions);
     }
 
-    public static function generateHash(string $uri, array|object $options): string
+    public static function generateHash(string $realm, string $uri, array|object $options): string
     {
-        hash('xxh128', $uri . json_encode((array)$options));
+        hash('xxh128', $realm . ':' . $uri  . ':' . json_encode((array)$options));
+    }
+
+    public function getRealmName(): string
+    {
+        return $this->realmName;
     }
 }

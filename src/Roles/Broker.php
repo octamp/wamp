@@ -61,6 +61,7 @@ class Broker extends AbstractRole implements RoleInterface
                         if (!isset($this->subscriptionGroups[$hash])) {
                             $this->subscriptionGroups[$hash] = new SubscriptionGroup(
                                 $this->matcher->getMatch($message->getMatchType()),
+                                $session->getRealm()->name,
                                 $message->getUri(),
                                 $message->getOptions(),
                                 $this->adapter,
@@ -98,6 +99,10 @@ class Broker extends AbstractRole implements RoleInterface
         }
 
         foreach ($this->loopAllSubscriptionGroup() as $subscriptionGroup) {
+            if ($session->getRealm()->name !== $subscriptionGroup->getRealmName()) {
+                continue;
+            }
+
             if (!$subscriptionGroup->isPublishMatch($message)) {
                 continue;
             }
@@ -109,27 +114,9 @@ class Broker extends AbstractRole implements RoleInterface
         }
     }
 
-    /**
-     * @deprecated Use SubscriptionGroup
-     */
-    protected function getSubscription(string $groupKey, string $key, ?array $raw = null): ?Subscription
-    {
-        if (isset($this->subscriptionGroups[$groupKey][$key])) {
-            return $this->subscriptionGroups[$groupKey][$key];
-        }
-
-        $session = $this->sessionStorage->getSessionUsingTransportId($raw['transportId']);
-        if ($session === null) {
-            return null;
-        }
-        $subscribeMessage = SubscribeMessage::createMessageFromArray($raw['message']);
-
-        return Subscription::createSubscriptionFromSubscribeMessage($session, $subscribeMessage, $raw['subscriptionId']);
-    }
-
     public function onSubscribeMessage(Session $session, SubscribeMessage $message): void
     {
-        $hash = SubscriptionGroup::generateHash($message->getUri(), $message->getOptions());
+        $hash = SubscriptionGroup::generateHash($session->getRealm()->name, $message->getUri(), $message->getOptions());
         if (!isset($this->subscriptionGroups[$hash])) {
             $this->subscribeChan->push([self::TYPE_SUBSCRIBE, $session, $message, $hash]);
         } else {
@@ -145,48 +132,6 @@ class Broker extends AbstractRole implements RoleInterface
 
         $subscribedMessage = new SubscribedMessage($message->getRequestId(), $subscription->getId());
         $session->sendMessage($subscribedMessage);
-    }
-
-    protected function getSubscriptionGroup(Subscription $subscription): SubscriptionGroup
-    {
-        foreach ($this->subscriptionGroups as $subscriptionGroup) {
-            if ($subscriptionGroup->isSubscriptionMatch($subscription)) {
-                return $subscriptionGroup;
-            }
-        }
-
-        return new SubscriptionGroup($this->matcher->getMatch($subscription->getMatch()), $subscription->getUri(), $subscription->getOptions(), $this->adapter, $this->sessionStorage, $this->serverId);
-    }
-
-    protected function getSubscriptionGroupByHash(string $hash, bool $global = false): ?SubscriptionGroup
-    {
-        if (isset($this->subscriptionGroups[$hash])) {
-            return $this->subscriptionGroups[$hash];
-        }
-
-        if ($global) {
-            $raw = $this->adapter->get('subg:' . $hash);
-            if ($raw !== null) {
-                return new SubscriptionGroup($raw['match'], $raw['uri'], $raw['options'], $this->adapter, $this->sessionStorage, $this->serverId);
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * @return SubscriptionGroup[]
-     */
-    protected function loopAllSubscriptionGroup(): \Generator
-    {
-        $keys = $this->adapter->keys('subg:*');
-        foreach ($keys as $key) {
-            [,$hash] = explode(':', $key);
-            $group = $this->getSubscriptionGroupByHash($hash, true);
-            if ($group !== null) {
-                yield $group;
-            }
-        }
     }
 
     public function onUnsubscribeMessage(Session $session, UnsubscribeMessage $message): void
@@ -211,6 +156,10 @@ class Broker extends AbstractRole implements RoleInterface
     public function onLeaveRealmEvent(Session $session, LeaveRealmEvent $event): void
     {
         foreach ($this->subscriptionGroups as $subscriptionGroup) {
+            if ($subscriptionGroup->getRealmName() !== $session->getRealm()->name) {
+                continue;
+            }
+
             $subscriptions = $subscriptionGroup->getSessionSubscriptions($session);
             foreach ($subscriptions as $subscription) {
                 $this->removeSubscription($subscriptionGroup, $subscription);
@@ -231,6 +180,48 @@ class Broker extends AbstractRole implements RoleInterface
         }
 
         $this->onPublishMessage($session, new PublishMessage(IDHelper::generateGlobalWampID(), [], 'wamp.session.on_join'), true);
+    }
+
+    protected function getSubscriptionGroup(Subscription $subscription): SubscriptionGroup
+    {
+        foreach ($this->subscriptionGroups as $subscriptionGroup) {
+            if ($subscriptionGroup->getRealmName() === $subscription->getRealm()->name && $subscriptionGroup->isSubscriptionMatch($subscription)) {
+                return $subscriptionGroup;
+            }
+        }
+
+        return new SubscriptionGroup($this->matcher->getMatch($subscription->getMatch()), $subscription->getRealm()->name, $subscription->getUri(), $subscription->getOptions(), $this->adapter, $this->sessionStorage, $this->serverId);
+    }
+
+    protected function getSubscriptionGroupByHash(string $hash, bool $global = false): ?SubscriptionGroup
+    {
+        if (isset($this->subscriptionGroups[$hash])) {
+            return $this->subscriptionGroups[$hash];
+        }
+
+        if ($global) {
+            $raw = $this->adapter->get('subg:' . $hash);
+            if ($raw !== null) {
+                return new SubscriptionGroup($raw['match'], $raw['realm'], $raw['uri'], $raw['options'], $this->adapter, $this->sessionStorage, $this->serverId);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return SubscriptionGroup[]
+     */
+    protected function loopAllSubscriptionGroup(): \Generator
+    {
+        $keys = $this->adapter->keys('subg:*');
+        foreach ($keys as $key) {
+            [,$hash] = explode(':', $key);
+            $group = $this->getSubscriptionGroupByHash($hash, true);
+            if ($group !== null) {
+                yield $group;
+            }
+        }
     }
 
     protected function removeSubscription(SubscriptionGroup $subscriptionGroup, Subscription $subscription): void
