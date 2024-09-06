@@ -28,6 +28,11 @@ $transportConfig = new TransportProviderConfig(
     host: $_ENV['SERVER_HOST'],
     port: $_ENV['SERVER_PORT'],
     workerNum: $_ENV['SERVER_WORKERNUM'],
+    realms: [
+        [
+            'name' => 'realm1'
+        ],
+    ],
     auth: [
         [
             'method' => 'ticket',

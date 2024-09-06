@@ -101,10 +101,13 @@ class Wamp
                 ]
             ], $server);
             $server->getConnectionStorage()->save($connection);
-            $realm = $this->realmManager->createRealm('realm1', $router);
-            $realm->setConnection($connection);
-            $realm->getMetaSession();
-            $this->realmManager->addRealm($realm);
+            foreach ($this->config->realms as $realm) {
+                $realm = $this->realmManager->createRealm($realm['name'], $router);
+                $realm->setConnection($connection);
+                $realm->getMetaSession();
+                $this->realmManager->addRealm($realm);
+            }
+
 
             $this->adapter->subscribe('forward:message', function (string $serverId, string $transportId, string $data) use ($sessionStorage) {
                 if ($this->serverId === $serverId) {
