@@ -24,7 +24,7 @@ Session data and Wamp Datas will be save in Redis so that all node / server can 
 
 ## Profile
 
-Octamp Wamp currently implemented using [Basic Profile](https://wamp-proto.org/wamp_bp_latest_ietf.html) of WAMP Proto.
+Octamp Wamp currently implemented using [Basic Profile and Advance Profile](https://wamp-proto.org/wamp_latest_ietf.html) and  of WAMP Proto.
 
 ## How to use
 
