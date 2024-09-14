@@ -1,0 +1,12 @@
+adapter:
+  type: redis
+  host: 0.0.0.0
+  port: 6379
+#  -- Uncomment the auth if you need username and password
+#  auth:
+#    username:
+#    password:
+#
+#  -- Uncomment options if you need to include other redis option such as database
+  options:
+    database: 0

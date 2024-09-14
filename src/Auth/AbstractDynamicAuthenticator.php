@@ -34,7 +34,7 @@ abstract class AbstractDynamicAuthenticator extends AbstractAuthenticator implem
         }
 
         $procedureName = $this->config['authenticator'];
-        $realm = $this->realmManager->getRealm($this->config['authenticator-realm']);
+        $realm = $this->realmManager->getRealm($this->config['authenticatorRealm']);
         $realmSession = $realm->getMetaSession();
         $requestId = IDHelper::incrementSessionWampID($realmSession);
 

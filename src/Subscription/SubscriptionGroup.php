@@ -193,7 +193,7 @@ class SubscriptionGroup
 
     public static function generateHash(string $realm, string $uri, array|object $options): string
     {
-        hash('xxh128', $realm . ':' . $uri  . ':' . json_encode((array)$options));
+        return hash('xxh128', $realm . ':' . $uri  . ':' . json_encode((array)$options));
     }
 
     public function getRealmName(): string

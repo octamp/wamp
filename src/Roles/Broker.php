@@ -202,7 +202,7 @@ class Broker extends AbstractRole implements RoleInterface
         if ($global) {
             $raw = $this->adapter->get('subg:' . $hash);
             if ($raw !== null) {
-                return new SubscriptionGroup($raw['match'], $raw['realm'], $raw['uri'], $raw['options'], $this->adapter, $this->sessionStorage, $this->serverId);
+                return new SubscriptionGroup($this->matcher->getMatch($raw['match']), $raw['realm'], $raw['uri'], $raw['options'], $this->adapter, $this->sessionStorage, $this->serverId);
             }
         }
 
@@ -240,7 +240,9 @@ class Broker extends AbstractRole implements RoleInterface
             unset($this->subscriptionGroups[$hash]);
             if ($this->adapter->countFields('sub:' . $hash) === 0) {
                 $this->adapter->del('sub:' . $hash);
+                $this->adapter->del('subg:' . $hash);
             }
+
         }
     }
 

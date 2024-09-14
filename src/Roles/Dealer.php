@@ -322,7 +322,7 @@ class Dealer extends AbstractRole implements RoleInterface
         $procedureNames = array_keys($this->procedures);
         foreach ($procedureNames as $name) {
             $this->procedures[$name]->leave($session);
-            $this->tryDeleteProcedure($session->getRealm(), $name);
+            $this->tryDeleteProcedure($session->getRealm(), $this->procedures[$name]->getProcedureName());
         }
 
         $search = Registration::generateKeyForInvocation($session->getSessionId(), '*', '*', '*', '*');

@@ -1,62 +1,46 @@
 <?php
 error_reporting(E_ALL ^ E_DEPRECATED);
+
 use Octamp\Wamp\Adapter\RedisAdapter;
+use Octamp\Wamp\Config\AdapterConfiguration;
+use Octamp\Wamp\Config\TransportConfiguration;
 use Octamp\Wamp\Config\TransportProviderConfig;
 use Octamp\Wamp\Wamp;
+use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
+use Symfony\Component\Config\Definition\Processor;
 use Symfony\Component\Dotenv\Dotenv;
+use Symfony\Component\Yaml\Yaml;
 
 $loader = require_once __DIR__ . '/../vendor/autoload.php';
 
+$rootPath = dirname(__DIR__);
+
 $env = new Dotenv();
-$env->loadEnv(dirname(__DIR__) . '/.env');
+$env->loadEnv($rootPath . '/.env');
 
+try {
+    $processor = new Processor();
+    $transportConfig = (object)$processor->processConfiguration(new TransportConfiguration(), Yaml::parseFile($rootPath . $_ENV['TRANSPORT_FILE']));
+    $transportProviderConfig = new TransportProviderConfig(
+        host: $transportConfig->host,
+        port: $transportConfig->port,
+        workerNum: $transportConfig->workerNum,
+        realms: $transportConfig->realms ?? [],
+        auth: $transportConfig->auths ?? []
+    );
+    $adapterConfig = (object)$processor->processConfiguration(new AdapterConfiguration(), Yaml::parseFile($rootPath . $_ENV['ADAPTER_FILE']));
+    $adapter = new RedisAdapter(
+        $adapterConfig->host,
+        $adapterConfig->port,
+        $adapterConfig->auth?->username ?? null,
+        $adapterConfig->auth?->password ?? null,
+        $adapterConfig->options ?? []
+    );
+} catch (InvalidConfigurationException $exception) {
+    printf('[INVALID][%s]: %s', $exception->getPath(), $exception->getMessage());
+    exit(1);
+}
 
-$redisOptions = [
-    'options' => [
-        'database' => $_ENV['REDIS_DATABASE'] ?? 0,
-    ]
-];
-
-$adapter = new RedisAdapter(
-    $_ENV['REDIS_HOST'],
-    $_ENV['REDIS_PORT'],
-    $_ENV['REDIS_USERNAME'] ?? null,
-    $_ENV['REDIS_PASSWORD'] ?? null,
-    $redisOptions
-);
-$transportConfig = new TransportProviderConfig(
-    host: $_ENV['SERVER_HOST'],
-    port: $_ENV['SERVER_PORT'],
-    workerNum: $_ENV['SERVER_WORKERNUM'],
-    realms: [
-        [
-            'name' => 'realm1'
-        ],
-    ],
-    auth: [
-        [
-            'method' => 'ticket',
-            'type' => 'dynamic',
-            'authenticator' => 'testing',
-            'authenticator-realm' => 'realm1',
-            'realms' => ['realm1']
-        ],
-        [
-            'method' => 'wampcra',
-            'type' => 'static',
-            'users' => [
-                [
-                    'authid' => 'auth',
-                    'secret' => 'qa2/QVmmjSx1JJuyH5EI2gMDQf+ARnfwMcLOpUfln74=',
-                    'role' => 'auth',
-                    'salt' => 'salt1',
-                    'keylen' => 32,
-                    'iterations' => 1000
-                ],
-            ],
-        ]
-    ],
-);
-$wamp = new Wamp($transportConfig, $adapter);
+$wamp = new Wamp($transportProviderConfig, $adapter);
 
 $wamp->run();

@@ -112,7 +112,7 @@ class Session
         $this->helloMessage = $message;
     }
 
-    public function getHelloMessage(): HelloMessage
+    public function getHelloMessage(): ?HelloMessage
     {
         return $this->helloMessage;
     }
@@ -208,19 +208,19 @@ class Session
         ];
     }
 
-    public function getRoleFeatures(): array
+    public function getRoleFeatures(): \stdClass
     {
-        return $this->getHelloMessage()->getDetails()?->roles ?? [];
+        return $this->getHelloMessage()->getDetails()?->roles ?? new \stdClass();
     }
 
     public function hasFeature(string $role, string $feature): bool
     {
         $roles = $this->getRoleFeatures();
-        if (!isset($roles[$role])) {
+        if (!isset($roles->{$role})) {
             return false;
         }
 
-        return $roles[$role]->features->{$feature} ?? false;
+        return $roles->{$role}->features->{$feature} ?? false;
     }
 
     public function incPendingCallCount(): int

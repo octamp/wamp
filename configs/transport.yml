@@ -1,0 +1,25 @@
+transport:
+  host: 0.0.0.0
+  port: 8080
+  workerNum: 1
+  realms:
+    - name: realm1
+  auths:
+    - method: anonymous
+      type: static
+# -- You can add more method, such us the examples below
+#    - method: ticket
+#      type: dynamic
+#      authenticator: testing
+#      authenticatorRealm: realm1
+#      realms:
+#        - realm1
+#    - method: wampcra
+#      type: static
+#      users:
+#        - authid: auth
+#          secret: qa2/QVmmjSx1JJuyH5EI2gMDQf+ARnfwMcLOpUfln74=
+#          role: auth
+#          salt: salt1
+#          keylen: 32
+#          iterations: 1000

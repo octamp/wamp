@@ -38,29 +38,72 @@ Octamp Wamp currently implemented using [Basic Profile](https://wamp-proto.org/w
 
 ```shell
 composer create-project octamp/wamp ./wamp
+cd ./wamp
 ```
 
 This will create the project in wamp folder
+
+You can update the file `/configs/adapter.yml` or copy to different file
+
+And update the configuration
+```yaml
+adapter:
+  type: redis
+  host: 0.0.0.0
+  port: 6379
+#  -- Uncomment the auth if you need username and password
+#  auth:
+#    username:
+#    password:
+#
+#  -- Uncomment options if you need to include other redis option such as database
+  options:
+    database: 0
+```
+
+You can update the file `/configs/transport.yml` or copy to different file
+
+And update the configuration
+```yaml
+transport:
+  host: 0.0.0.0
+  port: 8080
+  workerNum: 1
+  realms:
+    - name: realm1
+  auths:
+    - method: anonymous
+      type: static
+# -- You can add more method, such us the examples below
+#    - method: ticket
+#      type: dynamic
+#      authenticator: testing
+#      authenticatorRealm: realm1
+#      realms:
+#        - realm1
+#    - method: wampcra
+#      type: static
+#      users:
+#        - authid: auth
+#          secret: qa2/QVmmjSx1JJuyH5EI2gMDQf+ARnfwMcLOpUfln74=
+#          role: auth
+#          salt: salt1
+#          keylen: 32
+#          iterations: 1000
+
+```
 
 Copy the file `.env` to `.env.local`
 
 Update the necessary data
 ```
-REDIS_HOST=0.0.0.0
-REDIS_PORT=6379
-REDIS_PASSWORD=
-REDIS_USERNAME=
-REDIS_DATABASE=0
-
-SERVER_HOST=0.0.0.0
-SERVER_PORT=8080
-SERVER_WORKERNUM=1
+TRANSPORT_FILE=/configs/transport.yml
+ADAPTER_FILE=/configs/adapter.yml
 ```
 
 Now run the bin/server
 
 ```shell
-cd ./wamp
 php ./bin/server
 ```
 
@@ -184,6 +227,5 @@ That will now run the server
 ## TODOs
 
 - [ ] Implement CBOR Serializer https://wamp-proto.org/wamp_bp_latest_ietf.html#name-serializers
-- [ ] Implement Advance Profile
 - [ ] Remove Dependencies from Thruway Common
 - [ ] Add OpenSwoole Table Adapter as Data Provider
