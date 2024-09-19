@@ -8,8 +8,6 @@ use Octamp\Wamp\Event\EventInterface;
 use Octamp\Wamp\Roles\RoleInterface;
 use Octamp\Wamp\Session\Session;
 use Octamp\Wamp\Transport\TransportProviderInterface;
-use Thruway\Event\MessageEvent;
-use Thruway\Logging\Logger;
 use Thruway\Message\GoodbyeMessage;
 use Thruway\Message\Message;
 use Thruway\Message\WelcomeMessage;

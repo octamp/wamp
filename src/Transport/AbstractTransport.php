@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Octamp\Wamp\Transport;
 
 use Octamp\Server\Connection\Connection;
+use Octamp\Wamp\Exception\PingNotSupportException;
 use Octamp\Wamp\Promise\PromiseInterface;
 use Octamp\Wamp\Serializer\WampMessageSerializerInterface;
 use OpenSwoole\WebSocket\Frame;
-use Thruway\Exception\PingNotSupportedException;
 
 abstract  class AbstractTransport
 {
@@ -25,7 +25,7 @@ abstract  class AbstractTransport
 
     public function ping(int $timeout = 10): ?PromiseInterface
     {
-        throw new PingNotSupportedException();
+        throw new PingNotSupportException('Ping not supported');
     }
 
     public function onPong(Frame $frame): void

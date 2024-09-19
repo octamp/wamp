@@ -4,14 +4,11 @@ declare(strict_types=1);
 
 namespace Octamp\Wamp\Subscription;
 
-use Octamp\Wamp\Helper\IDHelper;
 use Octamp\Wamp\Realm\Realm;
 use Octamp\Wamp\Session\Session;
-use Thruway\Common\Utils;
 use Thruway\Message\EventMessage;
 use Thruway\Message\SubscribeMessage;
 use Thruway\Message\Traits\OptionsTrait;
-use Thruway\Subscription\SubscriptionGroup;
 
 class Subscription
 {
