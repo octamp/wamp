@@ -204,10 +204,10 @@ class RedisAdapter extends \Octamp\Server\Adapter\RedisAdapter implements Adapte
         return (bool) $exists;
     }
 
-    public function hkeys(string $key): array
+    public function hkeys(string $search): array
     {
         $client = $this->clients->pop();;
-        $keys = $client->getResource()->hkeys($key);
+        $keys = $client->getResource()->hkeys($search);
         $this->clients->push($client);
 
         return $keys;

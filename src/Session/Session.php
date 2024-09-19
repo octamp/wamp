@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace Octamp\Wamp\Session;
 
-use Octamp\Client\Promise\Promise;
+use Octamp\Wamp\Promise\Promise;
 use Octamp\Wamp\Auth\AuthenticationDetails;
 use Octamp\Wamp\Connection\Event\SendMessageEvent;
 use Octamp\Wamp\Connection\WithEventDispatcherInterface;
 use Octamp\Wamp\Event\LeaveRealmEvent;
 use Octamp\Wamp\Promise\Deferred;
+use Octamp\Wamp\Promise\PromiseInterface;
 use Octamp\Wamp\Realm\Realm;
 use Octamp\Wamp\Session\Adapter\AdapterInterface;
 use Octamp\Wamp\Session\Event\MessageEvent;
@@ -160,7 +161,7 @@ class Session
         $this->getTransport()->sendMessage($message);
     }
 
-    public function ping(): Promise
+    public function ping(): PromiseInterface
     {
         return $this->getTransport()->ping();
     }

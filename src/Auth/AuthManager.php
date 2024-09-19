@@ -211,7 +211,7 @@ class AuthManager implements WithRealmManagerInterface
         $this->sendWelecome($session);
     }
 
-    protected function sendWelecome(Session $session)
+    protected function sendWelecome(Session $session): void
     {
         $details = $session->getAuthenticationDetails()->jsonSerialize();
         $message = new WelcomeMessage(

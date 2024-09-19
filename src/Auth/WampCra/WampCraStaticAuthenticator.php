@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Octamp\Wamp\Auth\WampCra;
 
+use DateTimeInterface;
 use Octamp\Wamp\Auth\AbstractDynamicAuthenticator;
 use Octamp\Wamp\Auth\Response\AuthErrorResponse;
 use Octamp\Wamp\Auth\Response\AuthSuccessResponse;
@@ -66,7 +67,7 @@ class WampCraStaticAuthenticator extends AbstractDynamicAuthenticator
                 'authprovider' => 'userdb',
                 'authmethod' => $this->getMethod(),
                 'nonce' => bin2hex(random_bytes(16)),
-                'timestamp' => (new \DateTime())->format(\DateTime::ATOM),
+                'timestamp' => (new \DateTime())->format(DateTimeInterface::ATOM),
                 'sesssion' => $session->getSessionId(),
             ]),
         ];

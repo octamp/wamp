@@ -74,7 +74,7 @@ class SubscriptionGroup
         return $this->hash;
     }
 
-    public function publishMessage(Session $session, PublishMessage $message, bool $includeSessionMeta = false)
+    public function publishMessage(Session $session, PublishMessage $message, bool $includeSessionMeta = false): void
     {
         $options = $message->getOptions();
         $excludeSessions = $options->exclude ?? [];

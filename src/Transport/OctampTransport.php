@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Octamp\Wamp\Transport;
 
-use Octamp\Client\Promise\Deferred;
-use Octamp\Client\Promise\Promise;
+use Octamp\Wamp\Promise\Deferred;
+use Octamp\Wamp\Promise\PromiseInterface;
 use OpenSwoole\Timer;
 use OpenSwoole\WebSocket\Frame;
 use Thruway\Message\Message;
@@ -35,10 +35,10 @@ class OctampTransport extends AbstractTransport
         $this->connection->close();
     }
 
-    public function ping(int $timeout = 10): ?Promise
+    public function ping(int $timeout = 10): ?PromiseInterface
     {
         $seq = $this->pingSeq;
-        $this->connection->ping($seq);
+        $this->connection->ping((string) $seq);
 
         if ($timeout > 0) {
             $this->pingSeq++;

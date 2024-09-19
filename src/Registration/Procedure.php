@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace Octamp\Wamp\Registration;
 
-use Octamp\Client\Promise\Promise;
+use Octamp\Wamp\Promise\Promise;
 use Octamp\Wamp\Adapter\AdapterInterface;
+use Octamp\Wamp\Promise\PromiseInterface;
 use Octamp\Wamp\Session\Session;
 use Octamp\Wamp\Session\SessionStorage;
 use OpenSwoole\Coroutine;
@@ -39,7 +40,7 @@ class Procedure
      *
      * @param string $procedureName
      */
-    public function __construct(protected AdapterInterface $adapter, protected SessionStorage $sessionStorage, private string $realmName, string $procedureName, public bool $processSets = true)
+    public function __construct(protected AdapterInterface $adapter, protected SessionStorage $sessionStorage, private readonly string $realmName, string $procedureName, public bool $processSets = true)
     {
         $this->setProcedureName($procedureName);
 
@@ -56,10 +57,10 @@ class Procedure
      *
      * @param Session $session
      * @param \Thruway\Message\RegisterMessage $msg
-     * @return \Octamp\Client\Promise\PromiseInterface
+     * @return \Octamp\Wamp\Promise\Promise;
      * @throws \Exception
      */
-    public function processRegister(Session $session, RegisterMessage $msg, ?Registration $registration = null): \Octamp\Client\Promise\PromiseInterface
+    public function processRegister(Session $session, RegisterMessage $msg, ?Registration $registration = null): PromiseInterface
     {
         return Promise::create(function ($resolve, $reject) use ($session, $msg, $registration) {
             if ($registration === null) {
@@ -132,7 +133,7 @@ class Procedure
      * @return bool
      * @throws \Exception
      */
-    private function addRegistration(Registration $registration, RegisterMessage $msg)
+    private function addRegistration(Registration $registration, RegisterMessage $msg): bool
     {
         try {
             // make sure the uri is exactly the same
@@ -465,7 +466,7 @@ class Procedure
      * todo: This was part of the manager stuff - but may be used by some tests
      *
      */
-    public function managerGetRegistrations()
+    public function managerGetRegistrations(): array
     {
         $registrations = $this->getRegistrations();
 
@@ -482,6 +483,8 @@ class Procedure
                 "statistics" => $reg->getStatistics()
             ];
         }
+
+        return $regInfo;
     }
 
     public function getRealmName(): string

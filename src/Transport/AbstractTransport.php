@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Octamp\Wamp\Transport;
 
-use Octamp\Client\Promise\Promise;
 use Octamp\Server\Connection\Connection;
+use Octamp\Wamp\Promise\PromiseInterface;
 use Octamp\Wamp\Serializer\WampMessageSerializerInterface;
 use OpenSwoole\WebSocket\Frame;
 use Thruway\Exception\PingNotSupportedException;
@@ -23,7 +23,7 @@ abstract  class AbstractTransport
 
     abstract public function getForGenerationId(): string;
 
-    public function ping(int $timeout = 10): ?Promise
+    public function ping(int $timeout = 10): ?PromiseInterface
     {
         throw new PingNotSupportedException();
     }

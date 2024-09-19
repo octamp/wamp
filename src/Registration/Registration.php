@@ -368,9 +368,4 @@ class Registration
             'completedCallTimeTotal' => $this->completedCallTimeTotal
         ];
     }
-
-    public function getSessionStorage(): SessionStorage
-    {
-        return $this->sessionStorage;
-    }
 }

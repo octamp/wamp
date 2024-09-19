@@ -100,7 +100,7 @@ class Subscription
     }
 
 
-    public function setDisclosePublisher($disclosePublisher): bool
+    public function setDisclosePublisher($disclosePublisher): void
     {
         $this->disclosePublisher = $disclosePublisher;
     }
