@@ -2,7 +2,7 @@
 
 namespace Octamp\Wamp\Exception;
 
-class PingNotSupportException extends \Exception
+class PingNotSupportedException extends \Exception
 {
 
 }
