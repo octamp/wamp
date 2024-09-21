@@ -148,7 +148,7 @@ That will now run the server
 | Call                    | &check;   |
 | Call / Invocation Error | &check;   |
 | Caller Leaving          | &check;   |
-| Callee Leaveing         | &check;   |
+| Callee Leaving          | &check;   |
 
 ### Other Features
 | Feature        | Supported |
@@ -185,7 +185,7 @@ That will now run the server
 | Call Timeout                                   | &cross; |
 | Call Canceling                                 | &check; |
 | Call Re-Routing                                | &cross; |
-| Caller Identification                          | &cross; |
+| Caller Identification                          | &check; |
 | Call Trustlevels                               | &cross; |
 | Registration Meta API                          | &cross; |
 | Pattern-based Registration                     | &cross; |

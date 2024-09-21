@@ -1,12 +1,11 @@
-transport:
-  host: 0.0.0.0
-  port: 8080
-  workerNum: 1
-  realms:
-    - name: realm1
-  auths:
-    - method: anonymous
-      type: static
+transports:
+  - endpoint:
+      type: tcp
+      port: 8080
+    auths:
+      - method: anonymous
+        type: static
+
 # -- You can add more method, such us the examples below
 #    - method: ticket
 #      type: dynamic

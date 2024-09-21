@@ -30,13 +30,19 @@ class AuthenticationDetails implements \JsonSerializable
         $this->authMethod = null;
         $this->challenge = null;
         $this->challengeDetails = null;
+        $this->verificationDetails = null;
         $this->authExtra = null;
         $this->authProvider = null;
         $this->authRoles = [];
     }
 
-    public function setChallengeDetails(array|object $challengeDetails): void
+    public function setChallengeDetails(array|object|null $challengeDetails): void
     {
+        if ($challengeDetails === null) {
+            $this->challengeDetails = null;
+            return;
+        }
+
         $this->challengeDetails = (object) $challengeDetails;
     }
 
@@ -75,12 +81,28 @@ class AuthenticationDetails implements \JsonSerializable
         return $this->authMethod;
     }
 
-    static public function createAnonymous(): AuthenticationDetails
+    public static function createAnonymous(): AuthenticationDetails
     {
         $authDetails = new static();
         $authDetails->setAuthId("anonymous");
         $authDetails->setAuthMethod("anonymous");
         $authDetails->addAuthRole("anonymous");
+
+        return $authDetails;
+    }
+
+    public static function createFromArray(array $data): AuthenticationDetails
+    {
+        $authDetails = new static();
+        $authDetails->setAuthId($data['authid'] ?? null);
+        $authDetails->setAuthMethod($data['authmethod'] ?? null);
+        $authDetails->setAuthMethod($data['authmethod'] ?? null);
+        $authDetails->setAuthRoles($data['authroles'] ?? []);
+        $authDetails->setChallenge($data['challenge'] ?? null);
+        $authDetails->setChallengeDetails($data['challengeDetails'] ?? null);
+        $authDetails->setVerificationDetails($data['verificationDetails'] ?? null);
+        $authDetails->setAuthExtra($data['authextra'] ?? null);
+        $authDetails->setAuthProvider($data['authprovider'] ?? null);
 
         return $authDetails;
     }
@@ -129,12 +151,17 @@ class AuthenticationDetails implements \JsonSerializable
         return $this->authExtra;
     }
 
-    public function setAuthExtra(array|object $authExtra): void
+    public function setAuthExtra(array|object|null $authExtra): void
     {
+        if ($authExtra === null) {
+            $this->authExtra = null;
+            return;
+        }
+
         $this->authExtra = (object) $authExtra;
     }
 
-    public function setAuthProvider(string $provider): void
+    public function setAuthProvider(?string $provider): void
     {
         $this->authProvider = $provider;
     }
@@ -149,8 +176,13 @@ class AuthenticationDetails implements \JsonSerializable
         $this->authenticator = $authenticator;
     }
 
-    public function setVerificationDetails(array|object $details): void
+    public function setVerificationDetails(array|object|null $details): void
     {
+        if ($details === null) {
+            $this->verificationDetails = null;
+            return;
+        }
+
         $this->verificationDetails = (object) $details;
     }
 
@@ -164,7 +196,7 @@ class AuthenticationDetails implements \JsonSerializable
         return $this->authenticator;
     }
 
-    public function jsonSerialize(): array
+    public function jsonSerialize(bool $includeChallenge = false): array
     {
         $details = [
             'authid' => $this->getAuthId(),
@@ -172,6 +204,12 @@ class AuthenticationDetails implements \JsonSerializable
             'authmethod' => $this->authMethod,
             'authroles' => $this->getAuthRoles(),
         ];
+
+        if ($includeChallenge) {
+            $details['challenge'] = $this->getChallenge();
+            $details['challengeDetails'] = $this->challengeDetails;
+            $details['verificationDetails'] = $this->verificationDetails;
+        }
 
         if ($this->getAuthExtra() !== null) {
             $details['authextra'] = $this->getAuthExtra();

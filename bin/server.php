@@ -3,6 +3,7 @@ error_reporting(E_ALL ^ E_DEPRECATED);
 
 use Octamp\Wamp\Adapter\RedisAdapter;
 use Octamp\Wamp\Config\AdapterConfiguration;
+use Octamp\Wamp\Config\RealmConfiguration;
 use Octamp\Wamp\Config\TransportConfiguration;
 use Octamp\Wamp\Config\TransportProviderConfig;
 use Octamp\Wamp\Wamp;
@@ -20,14 +21,10 @@ $env->loadEnv($rootPath . '/.env');
 
 try {
     $processor = new Processor();
-    $transportConfig = (object)$processor->processConfiguration(new TransportConfiguration(), Yaml::parseFile($rootPath . $_ENV['TRANSPORT_FILE']));
-    $transportProviderConfig = new TransportProviderConfig(
-        host: $transportConfig->host,
-        port: $transportConfig->port,
-        workerNum: $transportConfig->workerNum,
-        realms: $transportConfig->realms ?? [],
-        auth: $transportConfig->auths ?? []
-    );
+    $realmConfig = $processor->processConfiguration(new RealmConfiguration(), Yaml::parseFile($rootPath . $_ENV['REALM_FILE']));
+    $transportConfig = $processor->processConfiguration(new TransportConfiguration(), Yaml::parseFile($rootPath . $_ENV['TRANSPORT_FILE']));
+    $serverConfig = new \Octamp\Wamp\Config\ServerConfig($transportConfig, $realmConfig, $_ENV['SERVER_WORKERNUM']);
+
     $adapterConfig = (object)$processor->processConfiguration(new AdapterConfiguration(), Yaml::parseFile($rootPath . $_ENV['ADAPTER_FILE']));
     $adapter = new RedisAdapter(
         $adapterConfig->host,
@@ -41,6 +38,6 @@ try {
     exit(1);
 }
 
-$wamp = new Wamp($transportProviderConfig, $adapter);
+$wamp = new Wamp($serverConfig, $adapter);
 
 $wamp->run();

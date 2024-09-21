@@ -15,7 +15,7 @@ abstract class AbstractAuthenticator implements AuthenticatorInterface
 {
     protected array $realms;
 
-    public function __construct(protected array $config)
+    public function __construct(protected array $config, protected array $endpoint)
     {
         $this->realms = $this->config['realms'] ?? [];
         $this->init();
@@ -38,7 +38,13 @@ abstract class AbstractAuthenticator implements AuthenticatorInterface
 
     public function canAuthenticate(Session $session, HelloMessage $message, array $methods): bool
     {
-        return in_array($this->getMethod(), $methods) && $this->supportRealm($session->getRealm()->name);
+        $port = $session->getTransport()?->getConnection()?->getRequest()?->server['server_port'] ?? '*';
+        $passedPort = true;
+        if ($this->endpoint['port'] !== '*' && $port !== '*') {
+            $passedPort = ((int)$port) === ((int)$this->endpoint['port']);
+        }
+
+        return $passedPort && in_array($this->getMethod(), $methods) && $this->supportRealm($session->getRealm()->name);
     }
 
     protected function generateChallengeResponse(

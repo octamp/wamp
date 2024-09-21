@@ -33,6 +33,7 @@ class RedisAdapter implements AdapterInterface
             'websocketProtocol' => $session->getTransport()->getSerializer()->protocolName(),
             'serverId' => $session->getServerId(),
             'helloMessage' => $session->getHelloMessage()?->getMessageParts() ?? null,
+            'authDetails' => $session->getAuthenticationDetails()?->jsonSerialize(true) ?? null
         ];
 
         $this->adapter->set($this->getKeyBySession($session), $details);

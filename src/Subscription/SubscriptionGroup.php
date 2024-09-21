@@ -89,6 +89,9 @@ class SubscriptionGroup
         $subscriptionsRaw = $this->adapter->get('sub:' . $this->hash());
         foreach ($subscriptionsRaw as $subscriptionRaw) {
             $subscription = $this->generateSubscriptionFromRaw($subscriptionRaw);
+            if ($subscription === null) {
+                continue;
+            }
             $sessionId = $subscription->getSession()->getSessionId();
             $authId = $subscription->getSession()->getAuthenticationDetails()->getAuthId();
             $authRole = $subscription->getSession()->getAuthenticationDetails()->getAuthRole();

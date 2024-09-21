@@ -4,15 +4,23 @@ declare(strict_types=1);
 
 namespace Octamp\Wamp\Config;
 
+use OpenSwoole\Constant;
+
 readonly class TransportProviderConfig
 {
     public function __construct(
-        public string $host = '0.0.0.0',
-        public int $port = 8080,
-        public int $workerNum = 1,
-        public array $realms = [],
-        public array $auth = []
+        public int $port,
+        public string $type = 'tcp',
+        public array $auths = []
     ) {
 
+    }
+
+    public function getSocketType(): int
+    {
+        return match ($this->type) {
+            'tcp' => Constant::SOCK_TCP,
+            'udp' => Constant::SOCK_UDP,
+        };
     }
 }

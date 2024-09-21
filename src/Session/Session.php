@@ -200,18 +200,18 @@ class Session
     {
         return [
             'session' => $this->getSessionId(),
-            'authid' => $this->getAuthenticationDetails()->getAuthId(),
-            'authrole' => $this->getAuthenticationDetails()->getAuthRole(),
-            'authroles' => $this->getAuthenticationDetails()->getAuthRoles(),
-            'authmethod' => $this->getAuthenticationDetails()->getAuthMethod(),
-            'authprovider' => $this->getAuthenticationDetails()->getAuthProvider(),
-            'authextra' => $this->getAuthenticationDetails()->getAuthExtra(),
+            'authid' => $this->getAuthenticationDetails()?->getAuthId() ?? null,
+            'authrole' => $this->getAuthenticationDetails()?->getAuthRole() ?? null,
+            'authroles' => $this->getAuthenticationDetails()?->getAuthRoles() ?? [],
+            'authmethod' => $this->getAuthenticationDetails()?->getAuthMethod() ?? null,
+            'authprovider' => $this->getAuthenticationDetails()?->getAuthProvider() ?? null,
+            'authextra' => $this->getAuthenticationDetails()->getAuthExtra() ?? new \stdClass(),
         ];
     }
 
     public function getRoleFeatures(): \stdClass
     {
-        return $this->getHelloMessage()->getDetails()?->roles ?? new \stdClass();
+        return (object)($this->getHelloMessage()->getDetails()?->roles ?? []);
     }
 
     public function hasFeature(string $role, string $feature): bool
@@ -239,12 +239,12 @@ class Session
         return $this->pendingCallCount--;
     }
 
-    public function setAuthenticationDetails(AuthenticationDetails $authenticationDetails): void
+    public function setAuthenticationDetails(?AuthenticationDetails $authenticationDetails): void
     {
         $this->authenticationDetails = $authenticationDetails;
     }
 
-    public function getAuthenticationDetails(): AuthenticationDetails
+    public function getAuthenticationDetails(): ?AuthenticationDetails
     {
         return $this->authenticationDetails;
     }

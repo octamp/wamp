@@ -170,7 +170,12 @@ class Broker extends AbstractRole implements RoleInterface
             return;
         }
 
-        $this->onPublishMessage($session, new PublishMessage(IDHelper::generateGlobalWampID(), [], 'wamp.session.on_leave'), true);
+        $this->onPublishMessage($session,new PublishMessage(
+            IDHelper::generateGlobalWampID(),
+            new \stdClass(),
+            'wamp.session.on_leave',
+            [$event->session->getAuthenticationDetails()?->jsonSerialize() ?? []]
+        ), true);
     }
 
     public function onJoinRealmEvent(Session $session, JoinRealmEvent $event): void
@@ -179,7 +184,12 @@ class Broker extends AbstractRole implements RoleInterface
             return;
         }
 
-        $this->onPublishMessage($session, new PublishMessage(IDHelper::generateGlobalWampID(), [], 'wamp.session.on_join'), true);
+        $this->onPublishMessage($session, new PublishMessage(
+            IDHelper::generateGlobalWampID(),
+            new \stdClass(),
+            'wamp.session.on_join',
+            [$event->session->getAuthenticationDetails()?->jsonSerialize() ?? []]
+        ), true);
     }
 
     protected function getSubscriptionGroup(Subscription $subscription): SubscriptionGroup
@@ -202,6 +212,9 @@ class Broker extends AbstractRole implements RoleInterface
         if ($global) {
             $raw = $this->adapter->get('subg:' . $hash);
             if ($raw !== null) {
+                if (!isset($raw['match'])) {
+                    return null;
+                }
                 return new SubscriptionGroup($this->matcher->getMatch($raw['match']), $raw['realm'], $raw['uri'], $raw['options'], $this->adapter, $this->sessionStorage, $this->serverId);
             }
         }

@@ -132,7 +132,7 @@ class Registration
         $registration = new Registration($session, $msg->getProcedureName(), $adapter, $id);
         $options = $msg->getOptions();
 
-        if (isset($options->disclose_caller) && $options->disclose_caller === true) {
+        if (isset($options->disclose_caller) && ((bool)$options->disclose_caller) === true) {
             $registration->setDiscloseCaller(true);
         }
 

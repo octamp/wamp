@@ -27,15 +27,26 @@ class TicketDynamicAuthenticator extends AbstractDynamicAuthenticator
         }
 
         try {
-            $result = $this->sendMessageToAuthenticator($message, ['authid' => $authId])->wait();
-            $authDetails = [];
-            if (isset($result->authid)) {
-                $authDetails['authid'] = $result->authid;
-            } else {
-                $authDetails['authid'] = $authId;
-            }
+            $data = $this->sendMessageToAuthenticator($message, ['authid' => $authId])->wait();
+            if ($data['success']) {
+                $authDetails = [];
+                $result = $data['result'] ?? new \stdClass();
+                if (isset($result->authid)) {
+                    $authDetails['authid'] = $result->authid;
+                } else {
+                    $authDetails['authid'] = $authId;
+                }
+                if (isset($result->role)) {
+                    $authDetails['authrole'] = $result->role;
+                }
+                if (isset($result->extra)) {
+                    $authDetails['authextra'] = $result->extra;
+                }
 
-            return $this->generateChallengeResponse($authDetails, $result);
+                return $this->generateChallengeResponse($authDetails, $result);
+            } else {
+                return $this->generateFailureResponse($data['error_uri'] ?? '', $data['error_details'] ?? []);
+            }
         } catch (PromiseErrorException $exception) {
             if ($exception->getData() instanceof PromiseInterrupted) {
                 return $this->generateFailureResponse('wamp.error.unknown', []);

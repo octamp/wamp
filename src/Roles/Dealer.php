@@ -88,7 +88,10 @@ class Dealer extends AbstractRole implements RoleInterface
         }
 
         if (!$this->hasProcedure($session->getRealm()->getRealmName(), $message->getProcedureName())) {
-            $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($message, 'wamp.error.no_such_procedure'));
+            $error = ErrorMessage::createErrorMessageFromMessage($message, 'wamp.error.no_such_procedure');
+            $error->setArgumentsKw((object)['topic' => $message->getProcedureName()]);
+
+            $session->sendMessage($error);
             return;
         }
 
@@ -208,8 +211,8 @@ class Dealer extends AbstractRole implements RoleInterface
         }
 
         $procedure = new Procedure($this->adapter, $this->sessionStorage, $realm, $procedureName, false);
-        $procedure->setDiscloseCaller($procedureRaw['discloseCaller']);
-        $procedure->setAllowMultipleRegistrations($procedureRaw['allowMultipleRegistrations']);
+        $procedure->setDiscloseCaller((bool)$procedureRaw['discloseCaller']);
+        $procedure->setAllowMultipleRegistrations((bool)$procedureRaw['allowMultipleRegistrations']);
         $procedure->setInvokeType($procedureRaw['invokeType']);
 
         if (!$procedure->hasRegistrations(true)) {
@@ -291,7 +294,7 @@ class Dealer extends AbstractRole implements RoleInterface
         if (!$details['cancelled'] || ($details['cancelled'] && $details['cancelMode'] === 'kill')) {
             $errorMessage = new ErrorMessage(
                 Message::MSG_CALL,
-                $details['callRequestId'],
+                (int) $details['callRequestId'],
                 $message->getDetails(),
                 $message->getErrorURI(),
                 $message->getArguments(),
@@ -337,13 +340,13 @@ class Dealer extends AbstractRole implements RoleInterface
     public function tryDeleteProcedure(Realm $realm, string $name): void
     {
         $procedureName = Procedure::generateGlobalName($realm->name, $name);
-        if (!$this->procedures[$procedureName]->hasRegistrations(true)) {
+        if (isset($this->procedures[$procedureName]) && !$this->procedures[$procedureName]->hasRegistrations(true)) {
             $this->adapter->del('proc:' . $procedureName);
             $this->adapter->del('proc:' . $procedureName . ':regs');
             $this->adapter->del('proc:' . $procedureName . ':lock');
 
             unset($this->procedures[$procedureName]);
-        } elseif (!$this->procedures[$procedureName]->hasRegistrations(false)) {
+        } elseif (isset($this->procedures[$procedureName]) && !$this->procedures[$procedureName]->hasRegistrations(false)) {
             unset($this->procedures[$procedureName]);
         }
     }

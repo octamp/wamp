@@ -1,5 +1,6 @@
 vendor
 .git
 .idea
-.env.local
+.env.*
 composer.lock
+.local

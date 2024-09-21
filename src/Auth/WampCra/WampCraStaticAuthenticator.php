@@ -30,9 +30,9 @@ class WampCraStaticAuthenticator extends AbstractDynamicAuthenticator
                 'role' => $principal['role'],
             ];
         }, $principals);
-        $maxAuthIdLen = strlen(max(array_column($principals, 'authid')));
-        $maxSecretLen = strlen(max(array_column($principals, 'secretDetails')));
-        $maxRoleLen = strlen(max(array_column($principals, 'role')));
+        $maxAuthIdLen = max(array_map('strlen', array_column($principals, 'authid')));
+        $maxSecretLen = max(array_map('strlen', array_column($principals, 'secretDetails')));
+        $maxRoleLen = max(array_map('strlen', array_column($principals, 'role')));
 
         $this->table = new Table(count($principals));
         $this->table->column('authid', Table::TYPE_STRING, $maxAuthIdLen);

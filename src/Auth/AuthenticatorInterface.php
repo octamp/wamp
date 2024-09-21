@@ -15,7 +15,7 @@ use Thruway\Message\HelloMessage;
 
 interface AuthenticatorInterface
 {
-    public function __construct(array $config);
+    public function __construct(array $config, array $endpoint);
 
     public function processHello(Session $session, HelloMessage $message): HelloSuccessResponse|HelloErrorResponse;
 

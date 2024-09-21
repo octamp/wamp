@@ -28,33 +28,44 @@ class WampCraDynamicAuthenticator extends AbstractDynamicAuthenticator
         }
 
         try {
-            $result = $this->sendMessageToAuthenticator($message, ['authid' => $authId])->wait();
-            $authDetails = [];
-            if (isset($result->authid)) {
-                $authDetails['authid'] = $result->authid;
+            $data = $this->sendMessageToAuthenticator($message, ['authid' => $authId])->wait();
+            if ($data['success']) {
+                $result = $data['result'] ?? new \stdClass();
+                $authDetails = [];
+                if (isset($result->authid)) {
+                    $authDetails['authid'] = $result->authid;
+                } else {
+                    $authDetails['authid'] = $authId;
+                }
+                if (isset($result->role)) {
+                    $authDetails['authrole'] = $result->role;
+                }
+                if (isset($result->extra)) {
+                    $authDetails['authextra'] = $result->extra;
+                }
+
+                $challengeDetails = [
+                    'challenge' => json_encode([
+                        'authid' => $authId,
+                        'authrole' => $result->role ?? '',
+                        'authprovider' => $result->authprovider ?? 'dynamic',
+                        'authmethod' => $this->getMethod(),
+                        'nonce' => bin2hex(random_bytes(16)),
+                        'timestamp' => (new \DateTime())->format(DateTimeInterface::ATOM),
+                        'sesssion' => $session->getSessionId(),
+                    ]),
+                ];
+
+                if (isset($result->salt)) {
+                    $challengeDetails['salt'] = $result->salt;
+                    $challengeDetails['keylen'] = $result->keylen ?? 32;
+                    $challengeDetails['iterations'] = $result->iteration ?? 1000;
+                }
+
+                return $this->generateChallengeResponse($authDetails, $result, $challengeDetails);
             } else {
-                $authDetails['authid'] = $authId;
+                return $this->generateFailureResponse($data['error_uri'] ?? '', $data['error_details'] ?? []);
             }
-
-            $challengeDetails = [
-                'challenge' => json_encode([
-                    'authid' => $authId,
-                    'authrole' => $result->role ?? '',
-                    'authprovider' => $result->authprovider ?? 'dynamic',
-                    'authmethod' => $this->getMethod(),
-                    'nonce' => bin2hex(random_bytes(16)),
-                    'timestamp' => (new \DateTime())->format(DateTimeInterface::ATOM),
-                    'sesssion' => $session->getSessionId(),
-                ]),
-            ];
-
-            if (isset($result->salt)) {
-                $challengeDetails['salt'] = $result->salt;
-                $challengeDetails['keylen'] = $result->keylen ?? 32;
-                $challengeDetails['iterations'] = $result->iteration ?? 1000;
-            }
-
-            return $this->generateChallengeResponse($authDetails, $result, $challengeDetails);
         } catch (PromiseErrorException $exception) {
             if ($exception->getData() instanceof PromiseInterrupted) {
                 return $this->generateFailureResponse('wamp.error.unknown', []);

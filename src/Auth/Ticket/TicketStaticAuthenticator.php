@@ -22,9 +22,9 @@ class TicketStaticAuthenticator extends AbstractAuthenticator
     {
         $principals = $this->config['principals'] ?? [];
 
-        $maxAuthIdLen = max(array_column($principals, 'authid'));
-        $maxSecretLen = max(array_column($principals, 'ticket'));
-        $maxRoleLen = max(array_column($principals, 'role'));
+        $maxAuthIdLen = max(array_map('strlen', array_column($principals, 'authid')));
+        $maxSecretLen = max(array_map('strlen', array_column($principals, 'ticket')));
+        $maxRoleLen = max(array_map('strlen', array_column($principals, 'role')));
 
         $this->table = new Table(count($principals));
         $this->table->column('authid', Table::TYPE_STRING, $maxAuthIdLen);

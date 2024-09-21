@@ -26,7 +26,7 @@ abstract class AbstractDynamicAuthenticator extends AbstractAuthenticator implem
         $args = [
             'authmethod' => $this->getMethod(),
         ];
-        if ($helloDetails->authid) {
+        if (isset($helloDetails->authid)) {
             $args['authid'] = $helloDetails->authid;
         }
         if (isset($helloDetails->authextra)) {
@@ -38,7 +38,7 @@ abstract class AbstractDynamicAuthenticator extends AbstractAuthenticator implem
         $realmSession = $realm->getMetaSession();
         $requestId = IDHelper::incrementSessionWampID($realmSession);
 
-        $callMessage = new CallMessage($requestId, [], $procedureName, [
+        $callMessage = new CallMessage($requestId, new \stdClass(), $procedureName, [
             $realm->name,
             $args['authid'] ?? null,
             array_merge($args, $details),
@@ -58,8 +58,9 @@ abstract class AbstractDynamicAuthenticator extends AbstractAuthenticator implem
                     /** @var ResultMessage $message */
                     $message = $event->message;
                     $data = $message->getArguments();
+
                     if (empty($data)) {
-                        $deferred->reject([]);
+                        $deferred->reject(['success' => false]);
                         return;
                     }
 
@@ -67,9 +68,9 @@ abstract class AbstractDynamicAuthenticator extends AbstractAuthenticator implem
                     $success = $result->status ?? true;
 
                     if (!$success) {
-                        $deferred->reject($result);
+                        $deferred->reject(['success' => false, 'result' => $result]);
                     } else {
-                        $deferred->resolve($result);
+                        $deferred->resolve(['success' => true, 'result' => $result]);
                     }
                 }
             );
@@ -81,6 +82,7 @@ abstract class AbstractDynamicAuthenticator extends AbstractAuthenticator implem
                     $message = $event->message;
 
                     $deferred->reject([
+                        'success' => false,
                         'error_uri' => $message->getErrorURI(),
                         'error_details' => $message->getDetails(),
                     ]);

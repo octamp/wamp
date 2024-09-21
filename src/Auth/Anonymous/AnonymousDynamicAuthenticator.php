@@ -23,16 +23,31 @@ class AnonymousDynamicAuthenticator extends AbstractDynamicAuthenticator
     public function processHello(Session $session, HelloMessage $message): HelloSuccessResponse|HelloErrorResponse
     {
         try {
-            $result =  $this->sendMessageToAuthenticator($message, [])->wait();
-            $authDetails = [];
-            if (isset($result->authid)) {
-                $authDetails['authid'] = $result->authid;
+            $data =  $this->sendMessageToAuthenticator($message, [])->wait();
+            if ($data['success']) {
+                $result = $data['result'] ?? new \stdClass();
+                $authDetails = [];
+                if (isset($result->authid)) {
+                    $authDetails['authid'] = $result->authid;
+                } else {
+                    return $this->generateFailureResponse('wamp.error.authentication_failed', []);
+                }
+                if (isset($result->role)) {
+                    $authDetails['authrole'] = $result->role;
+                }
+                if (isset($result->extra)) {
+                    $authDetails['authextra'] = $result->extra;
+                }
+
+                return $this->generateNoChallengeResponse($authDetails, $result);
+            } else {
+                return $this->generateFailureResponse($data['error_uri'] ?? '', $data['error_details'] ?? []);
             }
-            return $this->generateNoChallengeResponse($authDetails, $result);
         } catch (PromiseErrorException $exception) {
             if ($exception->getData() instanceof PromiseInterrupted) {
                 return $this->generateFailureResponse('wamp.error.unknown', []);
             }
+
             return $this->generateFailureResponse($exception->getData()['error_uri'] ?? '', $exception->getData()['error_details'] ?? []);
         }
     }

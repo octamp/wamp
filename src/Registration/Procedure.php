@@ -229,13 +229,19 @@ class Procedure
     public function processCallMessage(Session $session, CallMessage $message): bool
     {
         if (!$this->hasRegistrations()) {
-            $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($message, 'wamp.error.no_such_procedure'));
+            $error = ErrorMessage::createErrorMessageFromMessage($message, 'wamp.error.no_such_procedure');
+            $error->setArgumentsKw((object)['topic' => $message->getProcedureName()]);
+
+            $session->sendMessage($error);
             return false;
         }
 
         $registration = $this->getRegistrationForCall();
         if ($registration === null) {
-            $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($message, 'wamp.error.no_such_procedure'));
+            $error = ErrorMessage::createErrorMessageFromMessage($message, 'wamp.error.no_such_procedure');
+            $error->setArgumentsKw((object)['topic' => $message->getProcedureName()]);
+
+            $session->sendMessage($error);
             return false;
         }
 
@@ -320,7 +326,7 @@ class Procedure
 
     public function getRandomRegistration(): ?Registration
     {
-        $keys = $this->adapter->get('proc:' . $this->getGlobalName() . ':regs');
+        $keys = $this->adapter->hkeys('proc:' . $this->getGlobalName() . ':regs');
         if (count($keys) === 0) {
             return null;
         }

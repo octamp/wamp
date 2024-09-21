@@ -9,6 +9,7 @@ use Octamp\Server\Generator\RedisIDGenerator;
 use Octamp\Server\Server;
 use Octamp\Wamp\Adapter\AdapterInterface;
 use Octamp\Wamp\Auth\AuthManager;
+use Octamp\Wamp\Config\ServerConfig;
 use Octamp\Wamp\Config\TransportProviderConfig;
 use Octamp\Wamp\Connection\DummyConnection;
 use Octamp\Wamp\Helper\IDHelper;
@@ -48,10 +49,10 @@ class Wamp
 
     protected EventDispatcherInterface $eventDispatcher;
 
-    public function __construct(private readonly TransportProviderConfig $config, private readonly AdapterInterface $adapter)
+    public function __construct(private readonly ServerConfig $config, private readonly AdapterInterface $adapter)
     {
         $this->eventDispatcher = new EventDispatcher();
-        $this->authManager = new AuthManager($this->config->auth, $this->eventDispatcher);
+        $this->authManager = new AuthManager($this->config, $this->eventDispatcher);
         $this->realmManager = new RealmManager($this->authManager);
         $this->serverId = uniqid('');
         $this->init();
@@ -87,27 +88,28 @@ class Wamp
 
             $router->addTransportProviders($this->transportProviders);
 
-            $connection = DummyConnection::createFromArray([
-                'server' => $this->serverId,
-                'request' => [
-                    'fd' => 0,
-                    'header' => [],
-                    'server' => [],
-                    'cookie' => [],
-                    'get' => [],
-                    'files' => [],
-                    'post' => [],
-                    'tmpfiles' => [],
-                ]
-            ], $server);
-            $server->getConnectionStorage()->save($connection);
+            $realmFd = -1;
             foreach ($this->config->realms as $realm) {
+                $connection = DummyConnection::createFromArray([
+                    'server' => $this->serverId,
+                    'request' => [
+                        'fd' => $realmFd,
+                        'header' => [],
+                        'server' => [],
+                        'cookie' => [],
+                        'get' => [],
+                        'files' => [],
+                        'post' => [],
+                        'tmpfiles' => [],
+                    ]
+                ], $server);
+                $server->getConnectionStorage()->save($connection);
                 $realm = $this->realmManager->createRealm($realm['name'], $router);
                 $realm->setConnection($connection);
                 $realm->getMetaSession();
                 $this->realmManager->addRealm($realm);
+                $realmFd -= 1;
             }
-
 
             $this->adapter->subscribe('forward:message', function (string $serverId, string $transportId, string $data) use ($sessionStorage) {
                 if ($this->serverId === $serverId) {

@@ -266,14 +266,13 @@ class Call
 
             $details = [];
 
-            if ($this->getRegistration()->getDiscloseCaller() === true && $this->getCallerSession()->getAuthenticationDetails()) {
+            if ($this->getCallerSession()->getAuthenticationDetails() && $this->isDiscloseCaller()) {
                 $authenticationDetails = $this->getCallerSession()->getAuthenticationDetails();
                 $details = [
-                    "caller"     => $this->getCallerSession()->getSessionId(),
-                    "authid"     => $authenticationDetails->getAuthId(),
-                    "authrole"   => $authenticationDetails->getAuthRole(),
-                    "authroles"  => $authenticationDetails->getAuthRoles(),
-                    "authmethod" => $authenticationDetails->getAuthMethod(),
+                    "caller" => $this->getCallerSession()->getSessionId(),
+                    'caller_authid' => $authenticationDetails->getAuthId(),
+                    'caller_autrole' => $authenticationDetails->getAuthRole(),
+                    'caller_authroles' => $authenticationDetails->getAuthRoles(),
                 ];
 
                 if ($authenticationDetails->getAuthExtra() !== null) {
@@ -398,5 +397,11 @@ class Call
     public function getProcedure(): Procedure
     {
         return $this->procedure;
+    }
+
+    protected function isDiscloseCaller(): bool
+    {
+        return $this->getRegistration()->getDiscloseCaller()
+            || (isset($this->callMessage->getOptions()->disclose_me) && $this->callMessage->getOptions()->disclose_me);
     }
 }

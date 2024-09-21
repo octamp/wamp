@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Octamp\Wamp\Realm;
 
 use Octamp\Server\Connection\Connection;
+use Octamp\Wamp\Auth\AuthenticationDetails;
 use Octamp\Wamp\Auth\AuthManager;
 use Octamp\Wamp\Event\EventInterface;
 use Octamp\Wamp\Event\JoinRealmEvent;
@@ -12,6 +13,7 @@ use Octamp\Wamp\Event\LeaveRealmEvent;
 use Octamp\Wamp\Peers\Router;
 use Octamp\Wamp\Session\Session;
 use Octamp\Wamp\Session\SessionStorage;
+use OpenSwoole\Coroutine;
 use Thruway\Common\Utils;
 use Thruway\Message\AuthenticateMessage;
 use Thruway\Message\HelloMessage;
@@ -51,9 +53,11 @@ class Realm
             // TODO log
             return;
         }
+        Coroutine::create(function () use ($session, $message) {
+            $this->authManager->processHelloMessage($session, $message);
+            $this->sessionStorage->saveSession($session);
+        });
 
-        $this->authManager->processHelloMessage($session, $message);
-        $this->sessionStorage->saveSession($session);
     }
 
     public function onAuthenticateMessage(Session $session, AuthenticateMessage $message): void
@@ -76,7 +80,14 @@ class Realm
     {
         if ($this->metaSession === null) {
             $this->metaSession = $this->sessionStorage->createDummy($this->connection);
+            $authenticationDetails = AuthenticationDetails::createAnonymous();
+            $authenticationDetails->setAuthId('internal');
+            $authenticationDetails->setAuthRoles(['internal']);
+            $authenticationDetails->setAuthMethod('anonymous');
+            $this->metaSession->setAuthenticationDetails($authenticationDetails);
             $this->metaSession->setTrusted(true);
+            $this->metaSession->setAuthenticated(true);
+
             $this->addSession($this->metaSession);
         }
 

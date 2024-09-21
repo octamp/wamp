@@ -12,6 +12,8 @@ use Octamp\Wamp\Auth\Ticket\TicketDynamicAuthenticator;
 use Octamp\Wamp\Auth\Ticket\TicketStaticAuthenticator;
 use Octamp\Wamp\Auth\WampCra\WampCraDynamicAuthenticator;
 use Octamp\Wamp\Auth\WampCra\WampCraStaticAuthenticator;
+use Octamp\Wamp\Config\ServerConfig;
+use Octamp\Wamp\Config\TransportProviderConfig;
 use Octamp\Wamp\Event\JoinRealmEvent;
 use Octamp\Wamp\Peers\Router;
 use Octamp\Wamp\Realm\RealmManager;
@@ -55,18 +57,20 @@ class AuthManager implements WithRealmManagerInterface
 
     protected ?Router $router = null;
 
-    public function __construct(array $auths, protected EventDispatcherInterface $eventDispatcher)
+    public function __construct(ServerConfig $config, protected EventDispatcherInterface $eventDispatcher)
     {
-        foreach ($auths as $auth) {
-            try {
-                $this->addAuthenticator($this->generateAuthenticator($auth));
-            } catch (\Exception $exception) {
-                // TODO log exception
+        foreach ($config->transports as $transport) {
+            foreach ($transport->auths as $auth) {
+                try {
+                    $this->addAuthenticator($this->generateAuthenticator($auth, $transport));
+                } catch (\Exception $exception) {
+                    // TODO log exception
+                }
             }
         }
 
         if (empty($this->authenticators)) {
-            $this->addAuthenticator(new AnonymousStaticAuthenticator([]));
+            $this->addAuthenticator(new AnonymousStaticAuthenticator([], ['port' => '*']));
         }
     }
 
@@ -78,7 +82,7 @@ class AuthManager implements WithRealmManagerInterface
         $this->authenticators[] = $authenticator;
     }
 
-    public function generateAuthenticator(array $data): ?AuthenticatorInterface
+    public function generateAuthenticator(array $data, TransportProviderConfig $config): ?AuthenticatorInterface
     {
         $className = self::$authenticatorClasses[$data['method']][$data['type']];
 
@@ -86,82 +90,80 @@ class AuthManager implements WithRealmManagerInterface
             throw new \Exception($data['method'] . ' with type "' . $data['type'] . '" is not known authenticator');
         }
 
-        return new $className($data);
+        return new $className($data, ['type' => $config->type, 'port' => $config->port]);
     }
 
     public function processHelloMessage(Session $session, HelloMessage $message): void
     {
-        Coroutine::create(function () use ($session, $message) {
-            $authenticators = $this->getAuthenticators($session, $message);
-            if (empty($authenticators)) {
-                $session->abort((object) ['message' => 'No matching authentication method'], ' wamp.error.no_matching_auth_method');
-                return;
-            }
+        $authenticators = $this->getAuthenticators($session, $message);
+        if (empty($authenticators)) {
+            $session->abort((object) ['message' => 'No matching authentication method'], ' wamp.error.no_matching_auth_method');
+            return;
+        }
 
-            $errorUri = 'wamp.error.authentication_failed';
-            $errorDetails = new \stdClass();
+        $errorUri = 'wamp.error.authentication_failed';
+        $errorDetails = new \stdClass();
 
-            $status = self::STATUS_FAILURE;
+        $status = self::STATUS_FAILURE;
+        /* @var HelloSuccessResponse|HelloErrorResponse $res */
+        $res = null;
+        $successAuthenticator = null;
+        foreach ($authenticators as $authenticator) {
             /* @var HelloSuccessResponse|HelloErrorResponse $res */
-            $res = null;
-            $successAuthenticator = null;
-            foreach ($authenticators as $authenticator) {
-                /* @var HelloSuccessResponse|HelloErrorResponse $res */
-                $res = $authenticator->processHello($session, $message);
+            $res = $authenticator->processHello($session, $message);
 
-                $successAuthenticator = $authenticator;
-                $status = $res->status;
-                if ($status !== self::STATUS_FAILURE) {
-                    break;
-                }
-
-                $errorUri = $res->errorUri ?: $errorUri;
-                $errorDetails = $res->errorDetails ?? $errorDetails;
+            $successAuthenticator = $authenticator;
+            $status = $res->status;
+            if ($status !== self::STATUS_FAILURE) {
+                break;
             }
 
-            if ($status === self::STATUS_FAILURE) {
-                $session->abort($errorDetails, $errorUri);
-                return;
+            $errorUri = $res->errorUri ?: $errorUri;
+            $errorDetails = $res->errorDetails ?? $errorDetails;
+        }
+
+        if ($status === self::STATUS_FAILURE) {
+            $session->abort($errorDetails, $errorUri);
+            return;
+        }
+
+        $authDetailsRaw = $res->authDetails ?: new \stdClass();
+        $authDetails = new AuthenticationDetails();
+        $authDetails->setAuthId($authDetailsRaw->authid ?? null);
+        $authDetails->setAuthMethod($successAuthenticator->getMethod());
+        $authDetails->setAuthenticator($successAuthenticator);
+
+        if (isset($authDetailsRaw->authrole)) {
+            $authDetails->addAuthRole($authDetailsRaw->authrole);
+        }
+        if (isset($authDetailsRaw->authroles)) {
+            $authDetails->addAuthRole($authDetailsRaw->authroles);
+        }
+        if (isset($authDetailsRaw->authextra)) {
+            $authDetails->setAuthExtra($authDetailsRaw->authextra);
+        }
+        if (isset($authDetailsRaw->authprovider)) {
+            $authDetails->setAuthProvider($authDetailsRaw->authprovider);
+        }
+        $session->setAuthenticationDetails($authDetails);
+
+        if ($status === self::STATUS_CHALLENGE) {
+            $challengeDetails = $res->challengeDetails;
+            $authMethod = $res->challengeMethod;
+            $challenge = $challengeDetails?->challenge ?? '{}';
+
+            $session->getAuthenticationDetails()->setChallengeDetails($challengeDetails ?: []);
+            $session->getAuthenticationDetails()->setChallenge($challenge);
+            if ($res->verifyDetails !== null) {
+                $session->getAuthenticationDetails()->setVerificationDetails($res->verifyDetails);
             }
 
-            $authDetailsRaw = $res->authDetails ?: new \stdClass();
-            $authDetails = new AuthenticationDetails();
-            $authDetails->setAuthId($authDetailsRaw->authid ?? null);
-            $authDetails->setAuthMethod($successAuthenticator->getMethod());
-            $authDetails->setAuthenticator($successAuthenticator);
-
-            if (isset($authDetailsRaw->authrole)) {
-                $authDetails->addAuthRole($authDetailsRaw->authrole);
-            }
-            if (isset($authDetailsRaw->authroles)) {
-                $authDetails->addAuthRole($authDetailsRaw->authroles);
-            }
-            if (isset($authDetailsRaw->authextra)) {
-                $authDetails->setAuthExtra($authDetailsRaw->authextra);
-            }
-            if (isset($authDetailsRaw->authprovider)) {
-                $authDetails->setAuthProvider($authDetailsRaw->authprovider);
-            }
-            $session->setAuthenticationDetails($authDetails);
-
-            if ($status === self::STATUS_CHALLENGE) {
-                $challengeDetails = $res->challengeDetails;
-                $authMethod = $res->challengeMethod;
-                $challenge = $challengeDetails?->challenge ?? '{}';
-
-                $session->getAuthenticationDetails()->setChallengeDetails($challengeDetails ?: []);
-                $session->getAuthenticationDetails()->setChallenge($challenge);
-                if ($res->verifyDetails !== null) {
-                    $session->getAuthenticationDetails()->setVerificationDetails($res->verifyDetails);
-                }
-
-                $challengeDetails = $session->getAuthenticationDetails()->getChallengeDetails() ?: new \stdClass();
-                $session->sendMessage(new ChallengeMessage($authMethod, $challengeDetails));
-            } elseif ($status === self::STATUS_NO_CHALLENGE) {
-                $session->setAuthenticated(true);
-                $this->sendWelecome($session);
-            }
-        });
+            $challengeDetails = $session->getAuthenticationDetails()->getChallengeDetails() ?: new \stdClass();
+            $session->sendMessage(new ChallengeMessage($authMethod, $challengeDetails));
+        } elseif ($status === self::STATUS_NO_CHALLENGE) {
+            $session->setAuthenticated(true);
+            $this->sendWelcome($session);
+        }
     }
 
     public function processAuthenticateMessage(Session $session, AuthenticateMessage $message): void
@@ -208,15 +210,15 @@ class AuthManager implements WithRealmManagerInterface
         }
 
         $session->setAuthenticated(true);
-        $this->sendWelecome($session);
+        $this->sendWelcome($session);
     }
 
-    protected function sendWelecome(Session $session): void
+    protected function sendWelcome(Session $session): void
     {
         $details = $session->getAuthenticationDetails()->jsonSerialize();
         $message = new WelcomeMessage(
             $session->getSessionId(),
-            $details
+            (object)$details
         );
         $this->router?->addFeature($message);
         $session->sendMessage($message);

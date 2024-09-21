@@ -6,6 +6,7 @@ namespace Octamp\Wamp\Session;
 
 use Octamp\Server\Connection\Connection;
 use Octamp\Server\Connection\ConnectionStorage;
+use Octamp\Wamp\Auth\AuthenticationDetails;
 use Octamp\Wamp\Helper\SerializerHelper;
 use Octamp\Wamp\Realm\RealmManager;
 use Octamp\Wamp\Serializer\JsonSerializer;
@@ -89,15 +90,19 @@ class SessionStorage
 
         $session = new Session($transport, $serverId ?? $this->serverId, $this->adapter);
         $session->setId($id);
-        $session->setAuthenticated($data['authenticated']);
+        $session->setAuthenticated((bool) $data['authenticated']);
         $session->setRealm($realm);
-        $session->setTrusted($data['trusted']);
+        $session->setTrusted((bool) $data['trusted']);
 
-        if(isset($data['helloMessage'])) {
+        if(isset($data['helloMessage']) && $data['helloMessage']) {
             $helloMessage = HelloMessage::createMessageFromArray($data['helloMessage']);
             if ($helloMessage instanceof HelloMessage) {
                 $session->setHelloMessage($helloMessage);
             }
+        }
+
+        if (isset($data['authDetails']) && $data['authDetails']) {
+            $session->setAuthenticationDetails(AuthenticationDetails::createFromArray($data['authDetails']));
         }
 
         return $session;
