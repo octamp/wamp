@@ -65,15 +65,14 @@ You can update the file `/configs/transport.yml` or copy to different file
 
 And update the configuration
 ```yaml
-transport:
-  host: 0.0.0.0
-  port: 8080
-  workerNum: 1
-  realms:
-    - name: realm1
-  auths:
-    - method: anonymous
-      type: static
+transports:
+  - endpoint:
+      type: tcp
+      port: 8080
+    auths:
+      - method: anonymous
+        type: static
+
 # -- You can add more method, such us the examples below
 #    - method: ticket
 #      type: dynamic
@@ -93,12 +92,21 @@ transport:
 
 ```
 
+You can update the file `/configs/realms.yml` or copy to different file
+
+And update the configuration
+```yaml
+realms:
+  - name: realm1
+```
+
 Copy the file `.env` to `.env.local`
 
 Update the necessary data
 ```
 TRANSPORT_FILE=/configs/transport.yml
 ADAPTER_FILE=/configs/adapter.yml
+REALM_FILE=/configs/realms.yml
 ```
 
 Now run the bin/server
