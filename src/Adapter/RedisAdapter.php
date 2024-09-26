@@ -8,6 +8,11 @@ use OpenSwoole\Coroutine;
 use OpenSwoole\Timer;
 use Octamp\Wamp\Pools\Pool;
 use Predis\Client;
+use Predis\Command\Argument\Search\AlterArguments;
+use Predis\Command\Argument\Search\CommonArguments;
+use Predis\Command\Argument\Search\CreateArguments;
+use Predis\Command\Argument\Search\SearchArguments;
+use Predis\Response\ServerException;
 
 class RedisAdapter extends \Octamp\Server\Adapter\RedisAdapter implements AdapterInterface
 {
@@ -130,6 +135,19 @@ class RedisAdapter extends \Octamp\Server\Adapter\RedisAdapter implements Adapte
         return $value;
     }
 
+    public function dec(string $key, int $decrement = 1, ?string $field = null): int
+    {
+        $client = $this->clients->pop();
+        if ($field !== null) {
+            $value = $client->getResource()->hdecrby($key, $field, $decrement);
+        } else {
+            $value = $client->getResource()->decrby($key, $decrement);
+        }
+        $this->clients->push($client);
+
+        return $value;
+    }
+
     public function setField(string $key, string $field, mixed $data): void
     {
         $this->set($key, [$field => $data]);
@@ -138,7 +156,7 @@ class RedisAdapter extends \Octamp\Server\Adapter\RedisAdapter implements Adapte
     public function getField(string $key, string $field): mixed
     {
         $data = $this->runCommand(function (Client $client) use ($key, $field) {
-            $client->getResource()->hget($key, $field);
+            return $client->hget($key, $field);
         });
 
         if (is_array($data)) {
@@ -262,5 +280,105 @@ class RedisAdapter extends \Octamp\Server\Adapter\RedisAdapter implements Adapte
         $this->clients->push($client);
 
         return $data;
+    }
+
+    public function createIndex(string $index, array $schema, int $version, ?CreateArguments $arguments = null): void
+    {
+        $this->runCommand(function (Client $client) use ($index, $schema, $version, $arguments) {
+            $currentVersion = (int)$client->hget('indexes:version', $index);
+            if ($version <= $currentVersion) {
+                return;
+            }
+            $client->ftcreate($index, $schema, $arguments);
+            $client->hset('indexes:version', $index, (string) $version);
+        });
+    }
+
+    public function alterIndex(string $index, array $schema, int $version, ?AlterArguments $arguments = null): void
+    {
+        $this->runCommand(function (Client $client) use ($index, $schema, $version, $arguments) {
+            $currentVersion = (int)$client->hget('indexes:version', $index);
+            if ($version <= $currentVersion) {
+                return;
+            }
+            $client->ftalter($index, $schema, $arguments);
+            $client->hset('indexes:version', $index, (string) $version);
+        });
+    }
+
+    public function alterCreateIndex(string $index, array $schema, int $version, ?CreateArguments $arguments = null): void
+    {
+        $this->runCommand(function (Client $client) use ($index, $schema, $version, $arguments) {
+            $currentVersion = (int)$client->hget('indexes:version', $index);
+            if ($currentVersion === 0) {
+                try {
+                    $client->ftdropindex($index);
+                } catch (ServerException $serverException) {
+                    // do nothing
+                }
+            }
+
+            if ($version <= $currentVersion) {
+                return;
+            }
+            try {
+                $alterArguments = new AlterArguments();
+                $client->ftalter($index, $schema, $alterArguments);
+            } catch (ServerException $serverException) {
+                $client->ftcreate($index, $schema, $arguments);
+            }
+            $client->hset('indexes:version', $index, (string)$version);
+        });
+    }
+
+    public function searchIndex(string $index, array $queries = [], ?SearchArguments $arguments = null): object
+    {
+        $data = $this->runCommand(function (Client $client) use ($index, $queries, $arguments) {
+            return $client->ftsearch($index, implode(' ', $queries), $arguments);
+        });
+
+        return $this->parseIndexSearchResult($data, $arguments);
+    }
+
+    protected function parseIndexSearchResult(array $result, CommonArguments $arguments): object
+    {
+        $withContent = !in_array('NOCONTENT', $arguments->toArray());
+        $count = array_shift($result);
+        if ($count === null) {
+            $count = 0;
+        }
+
+        if ($count === 0) {
+            return (object)['count' => $count];
+        }
+
+        $newResult = [];
+
+        do {
+            $key = array_shift($result);
+            if (!$withContent) {
+                $newResult[] = $key;
+                continue;
+            }
+            $fieldData = array_shift($result);
+            $recordData = new \stdClass();
+            $recordData->_key = $key;
+            do {
+                $field = array_shift($fieldData);
+                $fieldValue = array_shift($fieldData);
+                $newFieldValue = json_decode($fieldValue, true);
+                if (is_array($newFieldValue)) {
+                    $recordData->{$field} = $this->decodeData($newFieldValue);
+                } else {
+                    $recordData->{$field} = $fieldValue;
+                }
+            } while (!empty($value));
+            $newResult[] = $recordData;
+        } while (!empty($result));
+
+        return (object)[
+            'count' => $count,
+            'result' => $newResult,
+        ];
     }
 }

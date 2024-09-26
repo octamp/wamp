@@ -167,7 +167,7 @@ class Wamp
                 return;
             }
 
-            $session->onClose();
+            $session->shutdown();
         });
 
         $transportProvider->getServer()->on('message', function (Server $server, Connection $connection, Frame $frame) {

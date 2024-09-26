@@ -16,6 +16,7 @@ use Octamp\Wamp\Session\Adapter\AdapterInterface;
 use Octamp\Wamp\Session\Event\MessageEvent;
 use Octamp\Wamp\Transport\AbstractTransport;
 use Thruway\Message\AbortMessage;
+use Thruway\Message\ErrorMessage;
 use Thruway\Message\HelloMessage;
 use Thruway\Message\Message;
 
@@ -62,12 +63,51 @@ class Session
             return;
         }
         $message = $this->getTransport()->getSerializer()->deserialize($event->data);
+        $event = new MessageEvent($this, $message);
 
         $eventName = 'Message:' . $message->getMsgCode();
-        if (method_exists($message, 'getRequestId')) {
-            $eventName .= ':' . $message->getRequestId();
+        if ($message instanceof ErrorMessage) {
+            $connection->dispatch($eventName . ':' . $message->getErrorMsgCode(), $event);
+            $connection->dispatch($eventName . ':' . $message->getErrorMsgCode() . ':' . $message->getRequestId(), $event);
         }
-        $connection->dispatch($eventName, new MessageEvent($this, $message));
+
+        if (method_exists($message, 'getRequestId')) {
+            $connection->dispatch($eventName . ':' . $message->getRequestId(), $event);
+        }
+
+        if (!$event->isPropagationStopped()) {
+            $connection->dispatch($eventName, new MessageEvent($this, $message));
+        }
+    }
+
+    public function addListener(string $eventName, callable $callback, int $priority = 0): void
+    {
+        $connection = $this->transport->getConnection();
+        if (!($connection instanceof WithEventDispatcherInterface)) {
+            return;
+        }
+
+        $connection->on($eventName, $callback, $priority);
+    }
+
+    public function addListenerOnce(string $eventName, callable $callback, int $priority = 0): void
+    {
+        $connection = $this->transport->getConnection();
+        if (!($connection instanceof WithEventDispatcherInterface)) {
+            return;
+        }
+
+        $connection->once($eventName, $callback, $priority);
+    }
+
+    public function removeAllListenerByEvent(string $eventName): void
+    {
+        $connection = $this->transport->getConnection();
+        if (!($connection instanceof WithEventDispatcherInterface)) {
+            return;
+        }
+
+        $connection->removeListenersForEvent($eventName);
     }
 
     public function setId(string $id): void
@@ -138,6 +178,7 @@ class Session
         $abortMessage = new AbortMessage($details, $uri);
         $this->sendMessage($abortMessage);
         $this->clearDeferred();
+        $this->shutdown();
     }
 
     public function setAuthenticated(bool $authenticated): void
@@ -181,6 +222,11 @@ class Session
         $this->goodByeSent = $sent;
     }
 
+    public function isGoodByeSent(): bool
+    {
+        return $this->goodByeSent;
+    }
+
     public function shutdown(): void
     {
         $this->onClose();
@@ -196,9 +242,9 @@ class Session
         $this->clearDeferred();
     }
 
-    public function getMetaInfo(): array
+    public function getMetaInfo(): object
     {
-        return [
+        return (object)[
             'session' => $this->getSessionId(),
             'authid' => $this->getAuthenticationDetails()?->getAuthId() ?? null,
             'authrole' => $this->getAuthenticationDetails()?->getAuthRole() ?? null,

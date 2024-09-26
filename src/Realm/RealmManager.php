@@ -47,6 +47,8 @@ class RealmManager
         if ($added) {
             $this->adapter->publish('realms:added', [$realm->name]);
         }
+
+        $realm->init();
     }
 
     public function getRealm(string $name): ?Realm

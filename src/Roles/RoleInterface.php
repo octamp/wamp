@@ -14,4 +14,6 @@ interface RoleInterface
     public function getName(): string;
 
     public function getFeatures(): object;
+
+    public function hasFeature(string $feature): bool;
 }

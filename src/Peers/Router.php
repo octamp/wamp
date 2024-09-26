@@ -56,6 +56,8 @@ class Router
     {
         $eventName = (new \ReflectionClass($message))->getShortName();
         $handlerName = 'on' . $eventName;
+        $afterHandlerName = 'onAfter' . $eventName;
+
         if (method_exists($this, $handlerName)) {
             call_user_func([$this, $handlerName], $session, $message);
         }
@@ -63,13 +65,19 @@ class Router
         foreach ($this->roles as $role) {
             $role->handle($session, $message);
         }
+
+        if (method_exists($this, $afterHandlerName)) {
+            call_user_func([$this, $afterHandlerName], $session, $message);
+        }
     }
 
     public function onGoodbyeMessage(Session $session, GoodbyeMessage $message): void
     {
-        $goodByeMessage = new GoodbyeMessage(new \stdClass(), 'wamp.close.goodbye_and_out');
-        $session->sendMessage($goodByeMessage);
-        $session->setGoodByeSent(true);
+        if (!$session->isGoodByeSent()) {
+            $goodByeMessage = new GoodbyeMessage(new \stdClass(), 'wamp.close.goodbye_and_out');
+            $session->sendMessage($goodByeMessage);
+            $session->setGoodByeSent(true);
+        }
         $session->shutdown();
     }
 

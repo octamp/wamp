@@ -6,6 +6,7 @@ namespace Octamp\Wamp\Roles;
 
 use Octamp\Wamp\Adapter\AdapterInterface;
 use Octamp\Wamp\Event\LeaveRealmEvent;
+use Octamp\Wamp\Helper\UriHelper;
 use Octamp\Wamp\Matcher\Matcher;
 use Octamp\Wamp\Realm\Realm;
 use Octamp\Wamp\Registration\Procedure;
@@ -30,6 +31,16 @@ class Dealer extends AbstractRole implements RoleInterface
      */
     protected array $procedures = [];
     protected \SplObjectStorage $registrationsBySession;
+
+    protected static $metaAPIs = [
+        'wamp.session.count', // Obtains the number of sessions currently attached to the realm.
+        'wamp.session.list', // Retrieves a list of the session IDs for all sessions currently attached to the realm.
+        'wamp.session.get', // Retrieves information on a specific session.
+        'wamp.session.kill', // Kill a single session identified by session ID.
+        'wamp.session.kill_by_authid', // Kill all currently connected sessions that have the specified authid.
+        'wamp.session.kill_by_authrole', // Kill all currently connected sessions that have the specified authrole.
+        'wamp.session.kill_all', // Kill all currently connected sessions in the caller's realm.
+    ];
 
     public function __construct(AdapterInterface $adapter, SessionStorage $sessionStorage, protected Matcher $matcher, protected string $serverId)
     {
@@ -82,16 +93,17 @@ class Dealer extends AbstractRole implements RoleInterface
 
     public function onCallMessage(Session $session, CallMessage $message): void
     {
-        if (!Utils::uriIsValid($message->getUri())) {
+        if (!UriHelper::uriIsValidStrict($message->getUri(), false, true)) {
             $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($message, 'wamp.error.invalid_uri'));
+
             return;
         }
 
         if (!$this->hasProcedure($session->getRealm()->getRealmName(), $message->getProcedureName())) {
             $error = ErrorMessage::createErrorMessageFromMessage($message, 'wamp.error.no_such_procedure');
             $error->setArgumentsKw((object)['topic' => $message->getProcedureName()]);
-
             $session->sendMessage($error);
+
             return;
         }
 
@@ -129,8 +141,8 @@ class Dealer extends AbstractRole implements RoleInterface
             $callIsProgressive = $invocationDetails['isProgressive'] ?? false;
             if ($isProgress && $callIsProgressive && $callerSession->hasFeature('caller', 'progressive_call_results')) {
                 $resultMessage = new ResultMessage(
-                    (int) $invocationDetails['callRequestId'],
-                    ['progress' => true],
+                    (int)$invocationDetails['callRequestId'],
+                    (object)['progress' => true],
                     $message->getArguments(),
                     $message->getArgumentsKw()
                 );
@@ -141,7 +153,7 @@ class Dealer extends AbstractRole implements RoleInterface
             $this->adapter->setField($invocationKey, 'hasResponse', true);
             $resultMessage = new ResultMessage(
                 (int) $invocationDetails['callRequestId'],
-                [],
+                new \stdClass(),
                 $message->getArguments(),
                 $message->getArgumentsKw()
             );
@@ -160,6 +172,17 @@ class Dealer extends AbstractRole implements RoleInterface
 
     public function onRegisterMessage(Session $session, RegisterMessage $message): void
     {
+        $useExactMatch = ($message->getOptions()->match ?? 'exact') === 'exact';
+        if (!$useExactMatch) {
+            $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($message, 'wamp.error.feature_not_supported'));
+            return;
+        }
+
+        if (!UriHelper::uriIsValidStrict($message->getUri(), !$useExactMatch, $session->isTrusted())) {
+            $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($message, 'wamp.error.invalid_uri'));
+            return;
+        }
+
         $procedureName = $message->getProcedureName();
         $globalName = Procedure::generateGlobalName($session->getRealm()->getRealmName(), $procedureName);
         $exists = $this->procedureExists($globalName, true);
@@ -324,8 +347,10 @@ class Dealer extends AbstractRole implements RoleInterface
     {
         $procedureNames = array_keys($this->procedures);
         foreach ($procedureNames as $name) {
-            $this->procedures[$name]->leave($session);
-            $this->tryDeleteProcedure($session->getRealm(), $this->procedures[$name]->getProcedureName());
+            if (isset($this->procedures[$name])) {
+                $this->procedures[$name]->leave($session);
+                $this->tryDeleteProcedure($session->getRealm(), $this->procedures[$name]->getProcedureName());
+            }
         }
 
         $search = Registration::generateKeyForInvocation($session->getSessionId(), '*', '*', '*', '*');
@@ -364,5 +389,28 @@ class Dealer extends AbstractRole implements RoleInterface
         $features->call_canceling = true;
 
         return $features;
+    }
+
+    // Meta API
+    protected function processMetaAPI(Session $session, CallMessage $message): bool
+    {
+        if (!$this->isMetaAPI($message->getUri())) {
+            return false;
+        }
+
+        $handlerName = $this->generateHandlerName($message->getUri());
+        call_user_func([$this, $handlerName], $session, $message);
+
+        return true;
+    }
+
+    protected function isMetaAPI(string $uri): bool
+    {
+        return in_array($uri, static::$metaAPIs);
+    }
+
+    protected function handleWampSessionCount(Session $session, CallMessage $message)
+    {
+
     }
 }

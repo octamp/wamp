@@ -41,12 +41,30 @@ class SessionStorage
         return $session;
     }
 
+    public function createSessionMeta(AbstractTransport $transport, ?string $serverId = null): SessionMeta
+    {
+        $session = new SessionMeta($transport, $serverId ?? $this->serverId, $this->adapter);
+
+        $id = $this->adapter->generateId();
+        $session->setId($id);
+
+        return $session;
+    }
+
     public function createDummy(Connection $connection): Session
     {
         $transport = new OctampTransport($connection);
         $transport->setSerializer(new JsonSerializer());
 
         return $this->createSession($transport, $this->serverId);
+    }
+
+    public function createDummySessionMeta(Connection $connection): SessionMeta
+    {
+        $transport = new OctampTransport($connection);
+        $transport->setSerializer(new JsonSerializer());
+
+        return $this->createSessionMeta($transport, $this->serverId);
     }
 
     public function createFromArray(array $data): ?Session
@@ -115,6 +133,15 @@ class SessionStorage
         }
         $this->transportSessions[$session->getTransportId()] = $session;
         $this->adapter->saveSession($session);
+        $this->savePrincipal($session);
+    }
+
+
+    public function savePrincipal(Session $session): void
+    {
+        if ($session->isAuthenticated() && $session->getAuthenticationDetails() !== null) {
+            $this->adapter->savePrincipal($session);
+        }
     }
 
     public function setAdapter(AdapterInterface $adapter): void
@@ -159,5 +186,55 @@ class SessionStorage
         foreach ($this->transportSessions as $transportSession) {
             yield $transportSession;
         }
+    }
+
+    public function getTotalSession(string $realm): int
+    {
+        $sessions = $this->adapter->count(['authenticated' => true, 'realm' => $realm]) ?? 0;
+
+        return max($sessions, 0);
+    }
+
+    public function getAllSessionIDs(string $realm, array $authRoles = []): array
+    {
+        return $this->adapter->findReturnKey(['authenticated' => true, 'realm' => $realm, 'authRole' => $authRoles]);
+    }
+
+    public function getSession(string $realm, string $id): ?Session
+    {
+        $record = $this->adapter->getSession($realm, $id);
+        if ($record === null) {
+            return null;
+        }
+
+        return $this->createFromArray((array)$record);
+    }
+
+    /**
+     * @return Session[]
+     */
+    public function findSessionsByAuthId(string $realm, string $authId): array
+    {
+        return $this->findSessions($realm, ['authId' => $authId]);
+    }
+
+    /**
+     * @return Session[]
+     */
+    public function findSessionsByAuthRole(string $realm, string $authRole): array
+    {
+        return $this->findSessions($realm, ['authRole' => $authRole]);
+    }
+
+    /**
+     * @return Session[]
+     */
+    public function findSessions(string $realm, array $conditions = []): array
+    {
+        $result = $this->adapter->find(array_merge(['realm' => $realm], $conditions));
+
+        return array_map(function (array $item) {
+            return $this->createFromArray($item);
+        }, $result);
     }
 }

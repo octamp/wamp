@@ -31,7 +31,7 @@ Octamp Wamp currently implemented using [Basic Profile and Advance Profile](http
 ### Prerequisite
 
 - PHP 8.2
-- Redis with Pub/Sub
+- Redis Stack with Pub/Sub
 - Openswoole
 
 ### Installation
@@ -178,9 +178,11 @@ That will now run the server
 | TLS        | &cross; | &cross; |
 | Cookie     | &cross; | &cross; |
 
-**Additional Authentication**
+### Authorization
 
-- [ ] Add checking of role
+| Feature       | Static  |
+|---------------|---------|
+| Authorization | &cross; |
 
 ### RPC Features
 
@@ -220,13 +222,18 @@ That will now run the server
 | Session Testament             | &cross; |
 | (Interface) Topic Reflection  | &cross; |
 
+### Meta API
+| Feature                | Event   | Procedure |
+|------------------------|---------|-----------|
+| Session Meta API       | &check; | &check;   |
+| Registration Meta API  | &cross; | &cross;   |
+| Subscriptions Meta API | &cross; | &cross;   |
+
 ### Others
 
 | Feature                     | Status  |
 |-----------------------------|---------|
 | Feature Announcement        | &check; |
-| Broker Session Meta API     | &check; |
-| Dealer Session Meta API     | &cross; |
 | RawSocket Transport         | &cross; |
 | Batched WebSocket transport | &cross; |
 | Call Rerouting              | &cross; |

@@ -24,4 +24,16 @@ abstract class AbstractRole implements RoleInterface
             call_user_func([$this, $handlerName], $session, $message);
         }
     }
+
+    public function hasFeature(string $feature): bool
+    {
+        return $this->getFeatures()->${$feature} ?? false;
+    }
+
+    protected function generateHandlerName(string $uri): string
+    {
+        $uri = str_replace('.', '', ucwords($uri, '.'));
+
+        return 'handle' . $uri;
+    }
 }

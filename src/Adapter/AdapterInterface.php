@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace Octamp\Wamp\Adapter;
 
+use Predis\Command\Argument\Search\AlterArguments;
+use Predis\Command\Argument\Search\CreateArguments;
+use Predis\Command\Argument\Search\SearchArguments;
+
 interface AdapterInterface extends \Octamp\Server\Adapter\AdapterInterface
 {
     public function start(string $serverId): void;
@@ -38,6 +42,8 @@ interface AdapterInterface extends \Octamp\Server\Adapter\AdapterInterface
 
     public function inc(string $key, int $increment = 1, ?string $field = null): int;
 
+    public function dec(string $key, int $decrement = 1, ?string $field = null): int;
+
     public function countFields(string $key): int;
 
     public function lock(string $key, int|string $value, int $seconds = 1): bool;
@@ -45,4 +51,12 @@ interface AdapterInterface extends \Octamp\Server\Adapter\AdapterInterface
     public function unlock(string $key, int|string $value): bool;
 
     public function exists(string $key): bool;
+
+    public function createIndex(string $index, array $schema, int $version, ?CreateArguments $arguments = null): void;
+
+    public function alterIndex(string $index, array $schema, int $version, ?AlterArguments $arguments = null): void;
+
+    public function alterCreateIndex(string $index, array $schema, int $version, ?CreateArguments $arguments = null): void;
+
+    public function searchIndex(string $index, array $queries = [], ?SearchArguments $arguments = null): object;
 }

@@ -8,6 +8,7 @@ use Octamp\Wamp\Adapter\AdapterInterface;
 use Octamp\Wamp\Event\JoinRealmEvent;
 use Octamp\Wamp\Event\LeaveRealmEvent;
 use Octamp\Wamp\Helper\IDHelper;
+use Octamp\Wamp\Helper\UriHelper;
 use Octamp\Wamp\Matcher\Matcher;
 use Octamp\Wamp\Matcher\UnExistMatchException;
 use Octamp\Wamp\Session\Session;
@@ -92,8 +93,13 @@ class Broker extends AbstractRole implements RoleInterface
         $this->stopped = true;
     }
 
-    public function onPublishMessage(Session $session, PublishMessage $message, bool $includeSessionMeta = false): void
+    public function onPublishMessage(Session $session, PublishMessage $message): void
     {
+        if (!UriHelper::uriIsValidStrict($message->getUri(), false, $session->isTrusted())) {
+            $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($message, 'wamp.error.invalid_uri'));
+            return;
+        }
+
         if ($message->getPublicationId() === null) {
             $message->setPublicationId(IDHelper::generateGlobalWampID());
         }
@@ -106,7 +112,7 @@ class Broker extends AbstractRole implements RoleInterface
             if (!$subscriptionGroup->isPublishMatch($message)) {
                 continue;
             }
-            $subscriptionGroup->publishMessage($session, $message, $includeSessionMeta);
+            $subscriptionGroup->publishMessage($session, $message);
         }
 
         if ($message->acknowledge()) {
@@ -116,6 +122,18 @@ class Broker extends AbstractRole implements RoleInterface
 
     public function onSubscribeMessage(Session $session, SubscribeMessage $message): void
     {
+        $useExactMatch = ($message->getOptions()->match ?? 'exact') === 'exact';
+        if (!UriHelper::uriIsValidStrict($message->getUri(), !$useExactMatch, true)) {
+            $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($message, 'wamp.error.invalid_uri'));
+            return;
+        }
+
+        if (!$useExactMatch && !($session->hasFeature('subscriber', 'pattern_based_subscription') && $this->hasFeature('pattern_based_subscription'))) {
+            $session->sendMessage(ErrorMessage::createErrorMessageFromMessage($message, 'wamp.error.feature_not_supported'));
+            return;
+        }
+
+
         $hash = SubscriptionGroup::generateHash($session->getRealm()->name, $message->getUri(), $message->getOptions());
         if (!isset($this->subscriptionGroups[$hash])) {
             $this->subscribeChan->push([self::TYPE_SUBSCRIBE, $session, $message, $hash]);
@@ -165,31 +183,6 @@ class Broker extends AbstractRole implements RoleInterface
                 $this->removeSubscription($subscriptionGroup, $subscription);
             }
         }
-
-        if (!$event->session->isAuthenticated()) {
-            return;
-        }
-
-        $this->onPublishMessage($session,new PublishMessage(
-            IDHelper::generateGlobalWampID(),
-            new \stdClass(),
-            'wamp.session.on_leave',
-            [$event->session->getAuthenticationDetails()?->jsonSerialize() ?? []]
-        ), true);
-    }
-
-    public function onJoinRealmEvent(Session $session, JoinRealmEvent $event): void
-    {
-        if (!$event->session->isAuthenticated()) {
-            return;
-        }
-
-        $this->onPublishMessage($session, new PublishMessage(
-            IDHelper::generateGlobalWampID(),
-            new \stdClass(),
-            'wamp.session.on_join',
-            [$event->session->getAuthenticationDetails()?->jsonSerialize() ?? []]
-        ), true);
     }
 
     protected function getSubscriptionGroup(Subscription $subscription): SubscriptionGroup
@@ -271,6 +264,7 @@ class Broker extends AbstractRole implements RoleInterface
         $features->publisher_exclusion = true;
         $features->publisher_identification = true;
         $features->pattern_based_subscription = true;
+        $features->session_meta_api = true;
 
         return $features;
     }

@@ -74,7 +74,7 @@ class SubscriptionGroup
         return $this->hash;
     }
 
-    public function publishMessage(Session $session, PublishMessage $message, bool $includeSessionMeta = false): void
+    public function publishMessage(Session $session, PublishMessage $message): void
     {
         $options = $message->getOptions();
         $excludeSessions = $options->exclude ?? [];
@@ -96,6 +96,10 @@ class SubscriptionGroup
             $authId = $subscription->getSession()->getAuthenticationDetails()->getAuthId();
             $authRole = $subscription->getSession()->getAuthenticationDetails()->getAuthRole();
 
+            if ($excludeMe && $sessionId === $session->getSessionId()) {
+                continue;
+            }
+
             if (
                 ($eligibleSession !== null && !in_array($sessionId, $eligibleSession))
                 || ($eligibleAuths !== null && !in_array($authId, $eligibleAuths))
@@ -111,10 +115,6 @@ class SubscriptionGroup
                 continue;
             }
 
-            if ($excludeMe && $sessionId === $session->getSessionId()) {
-                continue;
-            }
-
             $eventMsg = EventMessage::createFromPublishMessage($message, $subscription->getId());
             $discloseMe = $message->getOptions()->disclose_me ?? false;
             if ($discloseMe || $subscription->isDisclosePublisher()) {
@@ -124,12 +124,6 @@ class SubscriptionGroup
                 }
                 if ($authRole !== null) {
                     $eventMsg->getDetails()->publisher_authrole = $authId;
-                }
-            }
-
-            if ($includeSessionMeta) {
-                foreach ($session->getMetaInfo() as $item => $value) {
-                    $eventMsg->getDetails()->{$item} = $value;
                 }
             }
 
