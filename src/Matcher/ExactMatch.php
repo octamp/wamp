@@ -12,7 +12,7 @@ class ExactMatch implements MatchInterface
         return 'exact';
     }
 
-    public function isMatched($uri, $uri2): bool
+    public function isMatched($uri, $uri2, array &$matches = []): bool
     {
         return $uri === $uri2;
     }

@@ -188,17 +188,17 @@ That will now run the server
 
 | Feature                                        | Status  |
 |------------------------------------------------|---------|
-| Progressive Call Results                       | &check; |
+| Progressive Call Results                       | &cross; |
 | Ignoring Requests for Progressive Call Results | &cross; |
 | Progressive Call Results with Timeout          | &cross; |
 | Progressive Call Invocations                   | &cross; |
 | Call Timeout                                   | &cross; |
-| Call Canceling                                 | &check; |
+| Call Canceling                                 | &cross; |
 | Call Re-Routing                                | &cross; |
-| Caller Identification                          | &check; |
+| Caller Identification                          | &cross; |
 | Call Trustlevels                               | &cross; |
 | Registration Meta API                          | &cross; |
-| Pattern-based Registration                     | &cross; |
+| Pattern-based Registration                     | &check; |
 | Shared Registration                            | &check; |
 | Sharded Registration                           | &cross; |
 | Registration Revocation                        | &cross; |
@@ -226,7 +226,7 @@ That will now run the server
 | Feature                | Event   | Procedure |
 |------------------------|---------|-----------|
 | Session Meta API       | &check; | &check;   |
-| Registration Meta API  | &cross; | &cross;   |
+| Registration Meta API  | &check; | &cross;   |
 | Subscriptions Meta API | &cross; | &cross;   |
 
 ### Others

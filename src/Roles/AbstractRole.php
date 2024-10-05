@@ -8,10 +8,13 @@ use Octamp\Wamp\Adapter\AdapterInterface;
 use Octamp\Wamp\Event\EventInterface;
 use Octamp\Wamp\Session\Session;
 use Octamp\Wamp\Session\SessionStorage;
+use Octamp\Wamp\Traits\MessageEventHandlerTrait;
 use Thruway\Message\Message;
 
 abstract class AbstractRole implements RoleInterface
 {
+    use MessageEventHandlerTrait;
+
     public function __construct(protected AdapterInterface $adapter, protected SessionStorage $sessionStorage)
     {
     }

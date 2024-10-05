@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Octamp\Wamp\Realm;
 
 use Octamp\Server\Connection\Connection;
+use Octamp\Wamp\Adapter\AdapterInterface;
 use Octamp\Wamp\Auth\AuthenticationDetails;
 use Octamp\Wamp\Auth\AuthManager;
 use Octamp\Wamp\Event\EventInterface;
@@ -16,10 +17,12 @@ use Octamp\Wamp\Meta\Error;
 use Octamp\Wamp\Meta\ErrorException;
 use Octamp\Wamp\Meta\Result;
 use Octamp\Wamp\Peers\Router;
+use Octamp\Wamp\Registration\RegistrationStorage;
 use Octamp\Wamp\Session\Event\MessageEvent;
 use Octamp\Wamp\Session\Session;
 use Octamp\Wamp\Session\SessionMeta;
 use Octamp\Wamp\Session\SessionStorage;
+use Octamp\Wamp\Traits\MessageEventHandlerTrait;
 use OpenSwoole\Coroutine;
 use Thruway\Common\Utils;
 use Thruway\Message\AuthenticateMessage;
@@ -32,16 +35,25 @@ use Thruway\Message\RegisterMessage;
 
 class Realm
 {
+    use MessageEventHandlerTrait;
+
     private ?SessionMeta $metaSession = null;
 
     private ?Connection $connection = null;
 
-    public function __construct(public readonly string $name, protected SessionStorage $sessionStorage, protected Router $router, protected AuthManager $authManager)
-    {
+    public function __construct(
+        public readonly string $name,
+        protected SessionStorage $sessionStorage,
+        protected RegistrationStorage $registrationStorage,
+        protected Router $router,
+        protected AuthManager $authManager,
+        protected AdapterInterface $adapter
+    ) {
     }
 
     public function init(): void
     {
+        // session meta procedures
         $this->getMetaSession()->register('wamp.session.count', function() {
             return $this->sessionStorage->getTotalSession($this->getRealmName());
         });
@@ -141,6 +153,7 @@ class Realm
         $eventName = (new \ReflectionClass($message))->getShortName();
         $handlerName = 'on' . $eventName;
         $afterHandlerName = 'onAfter' . $eventName;
+
         if (method_exists($this, $handlerName)) {
             call_user_func([$this, $handlerName], $session, $message);
         }
@@ -185,6 +198,14 @@ class Realm
         $this->getMetaSession()->publish('wamp.session.on_join', [$session->getMetaInfo() ?? new \stdClass()]);
     }
 
+    public function onLeaveRealmEvent(Session $session, LeaveRealmEvent $event): void
+    {
+        if (!$event->session->isAuthenticated()) {
+            return;
+        }
+        $this->adapter->publish('session:leave', [$session->getRealm()->getRealmName(), $session->getSessionId()]);
+    }
+
     public function onAfterLeaveRealmEvent(Session $session, LeaveRealmEvent $event): void
     {
         if (!$event->session->isAuthenticated()) {
@@ -207,9 +228,9 @@ class Realm
             $this->metaSession->setAuthenticationDetails($authenticationDetails);
             $this->metaSession->setTrusted(true);
             $this->metaSession->setAuthenticated(true);
-            $this->metaSession->init();
-
             $this->addSession($this->metaSession);
+
+            $this->metaSession->init($this->registrationStorage, $this->adapter);
         }
 
         return $this->metaSession;

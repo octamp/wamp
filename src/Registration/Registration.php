@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Octamp\Wamp\Registration;
 
+use DateTimeInterface;
 use Octamp\Wamp\Adapter\AdapterInterface;
 use Octamp\Wamp\Helper\IDHelper;
+use Octamp\Wamp\Matcher\ExactMatch;
 use Octamp\Wamp\Realm\Realm;
 use Octamp\Wamp\Session\Session;
 use Octamp\Wamp\Session\SessionStorage;
@@ -22,10 +24,6 @@ class Registration
 {
 
     private string|int $id;
-
-    private Session $session;
-
-    private string $procedureName;
 
     /**
      * @var bool
@@ -57,7 +55,7 @@ class Registration
     /**
      * @var \DateTime
      */
-    private \DateTime $registeredAt;
+    private \DateTimeImmutable $registeredAt;
 
     /**
      * @var int
@@ -77,12 +75,12 @@ class Registration
     /**
      * @var null|\DateTime
      */
-    private ?\DateTime $lastCallStartedAt;
+    private ?\DateTimeImmutable $lastCallStartedAt;
 
     /**
      * @var null|\DateTime
      */
-    private ?\DateTime $lastIdledAt;
+    private ?\DateTimeImmutable $lastIdledAt;
 
     /**
      * @var string|null
@@ -94,8 +92,9 @@ class Registration
      */
     private float $completedCallTimeTotal;
 
+    private string $match;
+
     const SINGLE_REGISTRATION = 'single';
-    const THRUWAY_REGISTRATION = '_thruway';
     const ROUNDROBIN_REGISTRATION = 'roundrobin';
     const RANDOM_REGISTRATION = 'random';
     const FIRST_REGISTRATION = 'first';
@@ -107,46 +106,29 @@ class Registration
      * @param \Thruway\Session $session
      * @param string $procedureName
      */
-    public function __construct(Session $session, string $procedureName, protected AdapterInterface $adapter, ?string $id = null)
+    public function __construct(protected Session $session, protected AdapterInterface $adapter, protected string $procedureName, protected object $options = new \stdClass(), ?string $id = null)
     {
         $this->id = $id ?? IDHelper::generateRouterWampID($session->getServerId());
-        $this->session = $session;
-        $this->procedureName = $procedureName;
+
         $this->allowMultipleRegistrations = false;
         $this->invokeType = 'single';
         $this->discloseCaller = false;
         $this->calls = [];
-        $this->registeredAt = new \DateTime();
+        $this->registeredAt = new \DateTimeImmutable();
         $this->invocationCount = 0;
         $this->busyTime = 0;
         $this->invocationAverageTime = 0;
         $this->maxSimultaneousCalls = 0;
-        $this->lastCallStartedAt = null;
+        $this->lastCallStartedAt = new \DateTimeImmutable();
         $this->lastIdledAt = $this->registeredAt;
         $this->busyStart = null;
         $this->completedCallTimeTotal = 0;
+        $this->match = 'exact';
     }
 
     public static function createRegistrationFromRegisterMessage(Session $session, RegisterMessage $msg, AdapterInterface $adapter, ?string $id = null): Registration
     {
-        $registration = new Registration($session, $msg->getProcedureName(), $adapter, $id);
-        $options = $msg->getOptions();
-
-        if (isset($options->disclose_caller) && ((bool)$options->disclose_caller) === true) {
-            $registration->setDiscloseCaller(true);
-        }
-
-        if (isset($options->invoke)) {
-            $registration->setInvokeType($options->invoke);
-        } else {
-            if (isset($options->thruway_multiregister) && $options->thruway_multiregister === true) {
-                $registration->setInvokeType(Registration::THRUWAY_REGISTRATION);
-            } else {
-                $registration->setInvokeType(Registration::SINGLE_REGISTRATION);
-            }
-        }
-
-        return $registration;
+        return new Registration($session, $adapter, $msg->getProcedureName(), $msg->getOptions(), $id);
     }
 
     /**
@@ -154,7 +136,7 @@ class Registration
      */
     public function getAllowMultipleRegistrations(): bool
     {
-        return $this->allowMultipleRegistrations;
+        return $this->getInvokeType() !== 'single';
     }
 
     /**
@@ -167,10 +149,11 @@ class Registration
 
     /**
      * @param boolean $allowMultipleRegistrations
+     * @deprecated do nothing
      */
     public function setAllowMultipleRegistrations(bool $allowMultipleRegistrations): void
     {
-        $this->allowMultipleRegistrations = $allowMultipleRegistrations;
+        // do nothin
     }
 
     /**
@@ -179,7 +162,7 @@ class Registration
      */
     public function getInvokeType(): string
     {
-        return $this->invokeType;
+        return $this->options->invoke ?? 'single';
     }
 
     /**
@@ -193,7 +176,6 @@ class Registration
             Registration::SINGLE_REGISTRATION,
             Registration::ROUNDROBIN_REGISTRATION,
             Registration::RANDOM_REGISTRATION,
-            Registration::THRUWAY_REGISTRATION,
             Registration::FIRST_REGISTRATION,
             Registration::LAST_REGISTRATION
         );
@@ -366,6 +348,74 @@ class Registration
             'lastIdledAt' => $this->lastIdledAt,
             'lastCallStartedAt' => $this->lastCallStartedAt,
             'completedCallTimeTotal' => $this->completedCallTimeTotal
+        ];
+    }
+
+    public function getParsedId(): object
+    {
+        [$serverId, $id] = explode(':', $this->getId());
+
+        return (object)['routerId' => $serverId, 'id' => $id];
+    }
+
+    public function getOptions(): object
+    {
+        return $this->options;
+    }
+
+    public function getRegisteredAt(): \DateTimeImmutable
+    {
+        return $this->registeredAt;
+    }
+
+    public function setRegisteredAt(\DateTimeImmutable $registeredAt): void
+    {
+        $this->registeredAt = $registeredAt;
+    }
+
+    public function getMatch(): string
+    {
+        return $this->options->match ?? 'exact';
+    }
+
+    public function setLastCallStartedAtNow(): void
+    {
+        $this->lastCallStartedAt = new \DateTimeImmutable('now');
+    }
+
+    public function toArray(): array
+    {
+        return [
+            'id' => $this->getId(),
+            'realm' => $this->getRealm()->getRealmName(),
+            'sessionId' => $this->getSession()->getId(),
+            'procedure' => $this->getProcedureName(),
+            'registeredAt' => $this->getRegisteredAt(),
+            'options' => $this->options,
+        ];
+    }
+
+    /**
+     * @return array{
+     *     id: string,
+     *     realm: string,
+     *     sessionId: null|string,
+     *     procedure: string,
+     *     registeredAt: string,
+     *     options: object{match:string, invoke:string}
+     * }
+     */
+    public function toArrayFormatted(): array
+    {
+        return [
+            'id' => $this->getId(),
+            'realm' => $this->getRealm()->getRealmName(),
+            'sessionId' => $this->getSession()->getId(),
+            'procedure' => $this->getProcedureName(),
+            'registeredAt' => $this->getRegisteredAt()->format(DateTimeInterface::ATOM),
+            'lastCallStartedAt' => $this->lastCallStartedAt?->format(DateTimeInterface::ATOM) ?? null,
+            'serverId' => $this->getSession()->getServerId(),
+            'options' => $this->options,
         ];
     }
 }

@@ -28,7 +28,7 @@ class IDHelper
         return static::$adapter->inc('wamp:id', 1, 'global');
     }
 
-    public static function generateRouterWampID(string $serverId, ): string
+    public static function generateRouterWampID(string $serverId): string
     {
         $result = static::$adapter->inc('wamp:id', 1, $serverId);
 

@@ -48,7 +48,7 @@ class UriHelper
     {
         $regex = $allowEmpty ? '/^(([^\s\.#]+\.)|\.)*([^\s\.#]+)?$/' : '/^([^\s\.#]+\.)*([^\s\.#]+)$/';
         if ($strict) {
-            $regex = $allowEmpty ? '/^(([0-9a-z_]+\.)|\.)*([0-9a-z_]+)?$/' : '/^([0-9a-z_]+\.)*([0-9a-z_]+)$/';
+            $regex = $allowEmpty ? '/^(([0-9a-z_]+(\.|-)?)(\.|\-)?)*([0-9a-z_])(\.|\-)?$/' : '/^(([0-9a-z_]+(\.|-)?))*([0-9a-z_])$/';
         }
 
         return !!preg_match($regex, $uri);
@@ -64,5 +64,51 @@ class UriHelper
         }
 
         return static::uriIsValid($uri, $allowEmpty, true);
+    }
+
+    public static function escapedUri(string $procedure, bool $double = false): string
+    {
+        $procedure = addcslashes($procedure, '.-');
+        if ($double) {
+            $procedure = addcslashes($procedure, '\\');
+        }
+
+        return $procedure;
+    }
+
+    public static function uriForPrefixes(string $procedure, bool $escape = false, bool $doubleEscape = false): array
+    {
+        $lastChar = $procedure[strlen($procedure) - 1];
+        if ($lastChar === '-' || $lastChar === '.') {
+            return [$procedure . '*'];
+        }
+
+        return [
+            $escape ? static::escapedUri($procedure . '-*', $doubleEscape) : $procedure . '-*',
+            $escape ? static::escapedUri($procedure . '.*', $doubleEscape) : $procedure . '.*',
+        ];
+    }
+    public static function uriForWildCard(string $procedure, bool $escape = false, bool $doubleEscape = false): array
+    {
+        $lastChar = $procedure[strlen($procedure) - 1];
+        $firstChar = $procedure[0];
+        if ($lastChar === '.' || $lastChar === '-') {
+            $procedure .= '*';
+        }
+
+        if ($firstChar === '.' || $firstChar === '-') {
+            $procedure = '*' . $procedure;
+        }
+
+        $procedure = str_replace('..', '.*.', $procedure);
+        $procedure = str_replace('.-', '.*-', $procedure);
+        $procedure = str_replace('-.', '-*.', $procedure);
+        $procedure = str_replace('--', '-*-', $procedure);
+
+        if ($escape) {
+            $procedure = static::escapedUri($procedure, $doubleEscape);
+        }
+
+        return [$procedure];
     }
 }

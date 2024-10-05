@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Octamp\Wamp\Registration;
 
+use Octamp\Wamp\Matcher\ExactMatch;
+use Octamp\Wamp\Matcher\MatchInterface;
 use Octamp\Wamp\Promise\Promise;
 use Octamp\Wamp\Adapter\AdapterInterface;
 use Octamp\Wamp\Promise\PromiseInterface;
@@ -20,35 +22,24 @@ use Thruway\Message\UnregisterMessage;
 
 class Procedure
 {
-    private string $procedureName;
-
     /**
      * @var Registration[]
      */
     private array $registrations;
 
-    private bool $allowMultipleRegistrations;
-
-    private string $invokeType;
-
-    private bool $discloseCaller;
-
     private \SplQueue $callQueue;
+
+    private \DateTimeImmutable $createdAt;
 
     /**
      * Constructor
      *
      * @param string $procedureName
      */
-    public function __construct(protected AdapterInterface $adapter, protected SessionStorage $sessionStorage, private readonly string $realmName, string $procedureName, public bool $processSets = true)
+    public function __construct(protected AdapterInterface $adapter, protected SessionStorage $sessionStorage, private readonly string $realmName, protected string $procedureName, protected object $options = new \stdClass(), public bool $processSets = true)
     {
-        $this->setProcedureName($procedureName);
-
         $this->registrations = [];
-        $this->allowMultipleRegistrations = false;
-        $this->invokeType = Registration::SINGLE_REGISTRATION;
-        $this->discloseCaller = false;
-
+        $this->createdAt = new \DateTimeImmutable();
         $this->callQueue = new \SplQueue();
     }
 
@@ -71,6 +62,7 @@ class Procedure
                 // we already have something registered
                 if ($this->getAllowMultipleRegistrations()) {
                     $resolve($this->addRegistration($registration, $msg));
+                    $session->getRealm()->getMetaSession()->publish('wamp.registration.on_register', [$session->getSessionId(), $registration->getId()]);
                     return;
                 } else {
                     // we are not allowed multiple registrations, but we may want
@@ -100,7 +92,11 @@ class Procedure
                                 $this->setAllowMultipleRegistrations($registration->getAllowMultipleRegistrations());
                                 $this->setInvokeType($registration->getInvokeType());
 
-                                return $this->addRegistration($registration, $msg);
+                                $added = $this->addRegistration($registration, $msg);
+
+                                $session->getRealm()->getMetaSession()->publish('wamp.registration.on_register', [$session->getSessionId(), $registration->getId()]);
+
+                                return $added;
                             });
 
                         $result = $promise->wait();
@@ -119,6 +115,15 @@ class Procedure
                 }
 
                 $resolve($this->addRegistration($registration, $msg));
+
+                $session->getRealm()->getMetaSession()->publish('wamp.registration.on_create', [$session->getSessionId(), (object)[
+                    'id' => $registration->getId(),
+                    'created' => $this->getCreatedAt()->format('c'),
+                    'uri' => $this->getProcedureName(),
+                    'match' => $this->getMatch()->getName(),
+                    'invoke' => $this->getInvokeType(),
+                ]]);
+                $session->getRealm()->getMetaSession()->publish('wamp.registration.on_register', [$session->getSessionId(), $registration->getId()]);
                 return;
             }
 
@@ -167,8 +172,11 @@ class Procedure
 
         $session = $registration->getSession();
         $id =  $session->getTransportId() . ':' . $registration->getId();
-        $this->adapter->setField('proc:' . $this->getGlobalName() . ':regs', $id, [
+        $parsedId = $registration->getParsedId();
+        $this->adapter->setField('procregs:' . $this->getGlobalName(), $id, [
             'id' => $registration->getId(),
+            'routerId' => $parsedId->routerId,
+            'registrationId' => $parsedId->id,
             'sessionId' => $session->getId(),
             'transportId' => $session->getTransportId(),
             'message' => $message->getMessageParts(),
@@ -195,7 +203,7 @@ class Procedure
             return $this->registrations[$key];
         }
 
-        $procedureRegKey = 'proc:' . $this->getGlobalName() . ':regs';
+        $procedureRegKey = 'procregs:' . $this->getGlobalName();
         $result = $this->adapter->get($procedureRegKey, [$key]);
 
         $registrationRaw = $result[$key] ?? null;
@@ -215,13 +223,15 @@ class Procedure
         }
         $key = $session->getTransportId() . ':' . $registration->getId();
         unset($this->registrations[$key]);
-        $this->adapter->del('proc:' . $this->getGlobalName() . ':regs', [$key]);
+        $this->adapter->del('procregs:' . $this->getGlobalName(), [$key]);
 
         Coroutine::create(function () use ($session, $msg) {
             $this->cancelCalls($session, $msg->getRegistrationId());
         });
 
         $session->sendMessage(UnregisteredMessage::createFromUnregisterMessage($msg));
+
+        $session->getRealm()->getMetaSession()->publish('wamp.registration.on_unregister', [$session->getSessionId(), $msg->getRegistrationId()]);
 
         return true;
     }
@@ -293,7 +303,7 @@ class Procedure
     public function hasRegistrations(bool $global = true): bool
     {
         if ($global) {
-            $registrations = $this->adapter->hkeys('proc:' . $this->getGlobalName() . ':regs');
+            $registrations = $this->adapter->hkeys('procregs:' . $this->getGlobalName());
 
             return !empty($registrations);
         }
@@ -303,7 +313,7 @@ class Procedure
 
     public function getFirstRegistration(): ?Registration
     {
-        $procedureRegKey = 'proc:' . $this->getGlobalName() . ':regs';
+        $procedureRegKey = 'procregs:' . $this->getGlobalName();
         $keys = $this->adapter->hkeys($procedureRegKey);
         if (count($keys) === 0) {
             return null;
@@ -314,7 +324,7 @@ class Procedure
 
     public function getLastRegistration(): ?Registration
     {
-        $keys = $this->adapter->hkeys('proc:' . $this->getGlobalName() . ':regs');
+        $keys = $this->adapter->hkeys('procregs:' . $this->getGlobalName());
         if (count($keys) === 0) {
             return null;
         }
@@ -326,7 +336,7 @@ class Procedure
 
     public function getRandomRegistration(): ?Registration
     {
-        $keys = $this->adapter->hkeys('proc:' . $this->getGlobalName() . ':regs');
+        $keys = $this->adapter->hkeys('procregs:' . $this->getGlobalName());
         if (count($keys) === 0) {
             return null;
         }
@@ -339,12 +349,12 @@ class Procedure
     public function getRoundRobinRegistration(): ?Registration
     {
         $index = $this->adapter->inc('proc:' . $this->getGlobalName(), 1, 'lastCallIndex');
-        $totalRegistration = $this->adapter->countFields('proc:' . $this->getGlobalName() . ':regs');
+        $totalRegistration = $this->adapter->countFields('procregs:' . $this->getGlobalName());
         if ($index >= $totalRegistration) {
             $index = 0;
             $this->adapter->setField('proc:' . $this->getGlobalName(), 'lastCallIndex', 0);
         }
-        $keys = $this->adapter->hkeys('proc:' . $this->getGlobalName() . ':regs');
+        $keys = $this->adapter->hkeys('procregs:' . $this->getGlobalName());
         if (count($keys) === 0) {
             return null;
         }
@@ -385,22 +395,22 @@ class Procedure
 
     public function getDiscloseCaller(): bool
     {
-        return $this->discloseCaller;
+        return $this->options->disclose_caller;
     }
 
     public function setDiscloseCaller(bool $discloseCaller): void
     {
-        $this->discloseCaller = $discloseCaller;
+        $this->options->disclose_caller = $discloseCaller;
     }
 
     public function getInvokeType(): string
     {
-        return $this->invokeType;
+        return $this->options->invoke ?? 'single';
     }
 
-    public function setInvokeType(string $invoketype): void
+    public function setInvokeType(string $invoke): void
     {
-        $this->invokeType = $invoketype;
+        $this->options->invoke = $invoke;
     }
 
     public function isAllowMultipleRegistrations(): bool
@@ -410,15 +420,16 @@ class Procedure
 
     public function getAllowMultipleRegistrations(): bool
     {
-        return $this->allowMultipleRegistrations;
+        return $this->getInvokeType() !== 'single';
     }
 
     /**
      * @param boolean $allowMultipleRegistrations
+     * @deprecated this will do nothing
      */
     public function setAllowMultipleRegistrations(bool $allowMultipleRegistrations): void
     {
-        $this->allowMultipleRegistrations = $allowMultipleRegistrations;
+        // $this->allowMultipleRegistrations = $allowMultipleRegistrations;
     }
 
     public function getRegistrations(): array
@@ -426,8 +437,9 @@ class Procedure
         return $this->registrations;
     }
 
-    public function leave(Session $session): void
+    public function leave(Session $session): ?Registration
     {
+        $lastRegistration = null;
         // remove all registrations that belong to this session
         /* @var $registration Registration */
         foreach ($this->registrations as $i => $registration) {
@@ -437,12 +449,16 @@ class Procedure
 
             $key = $session->getTransportId() . ':' . $registration->getId();
             unset($this->registrations[$key]);
-            $this->adapter->del('proc:' . $this->getGlobalName() . ':regs', [$key]);
+            $this->adapter->del('procregs:' . $this->getGlobalName(), [$key]);
+
+            $lastRegistration = $registration;
 
             Coroutine::create(function () use ($session, $registration) {
                 $this->cancelCalls($session, $registration->getId());
             });
         }
+
+        return $lastRegistration;
     }
 
     protected function cancelCalls(Session $session, string|int $registrationId): array
@@ -482,7 +498,6 @@ class Procedure
             $regInfo[] = [
                 'id' => $reg->getId(),
                 "invoke" => $reg->getInvokeType(),
-                "thruway_multiregister" => $reg->getAllowMultipleRegistrations(),
                 "disclose_caller" => $reg->getDiscloseCaller(),
                 "session" => $reg->getSession()->getSessionId(),
                 "authid" => $reg->getSession()->getAuthenticationDetails()->getAuthId(),
@@ -506,5 +521,25 @@ class Procedure
     public static function generateGlobalName(string $realmName, string $name): string
     {
         return $realmName . ':' . $name;
+    }
+
+    public function setCreatedAt(\DateTimeImmutable $createdAt): void
+    {
+        $this->createdAt = $createdAt;
+    }
+
+    public function getCreatedAt(): \DateTimeImmutable
+    {
+        return $this->createdAt;
+    }
+
+    public function getMatch(): string
+    {
+        return $this->options->match ?? 'exact';
+    }
+
+    public function setMatch(string $match): void
+    {
+        $this->options->match = $match;
     }
 }

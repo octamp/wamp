@@ -19,18 +19,18 @@ class RedisAdapter implements AdapterInterface
 
     protected function init(): void
     {
-            $args = new CreateArguments();
-            $args->prefix(['ses:']);
-            $this->adapter->alterCreateIndex('session', [
-                new TagField('id'),
-                new TagField('transportId'),
-                new TagField('realm'),
-                new TagField('serverId'),
-                new TagField('authRole'),
-            ], 2, $args);
+        $args = new CreateArguments();
+        $args->prefix(['ses:']);
+        $this->adapter->alterCreateIndex('session', [
+            new TagField('id'),
+            new TagField('transportId'),
+            new TagField('realm'),
+            new TagField('serverId'),
+            new TagField('authRole'),
+        ], 2, $args);
 
-            $this->adapter->alterIndex('session', [new TagField('authenticated')], 3);
-            $this->adapter->alterIndex('session', [new TagField('authId')], 4);
+        $this->adapter->alterIndex('session', [new TagField('authenticated')], 3);
+        $this->adapter->alterIndex('session', [new TagField('authId')], 4);
     }
 
     public function generateId(): string
@@ -68,7 +68,7 @@ class RedisAdapter implements AdapterInterface
         $args->dialect('2');
         $args->limit(0, 1);
 
-        $result = $this->adapter->searchIndex('session', $this->generateCondition(['id' => $id, 'authenticated' => 1, 'realm' => $realm]));
+        $result = $this->adapter->searchIndex('session', $this->generateCondition(['id' => $id, 'authenticated' => 1, 'realm' => $realm]), $args);
         if ($result->count === 0) {
             return null;
         }
@@ -78,27 +78,34 @@ class RedisAdapter implements AdapterInterface
 
     public function find(array $condition): array
     {
-        $args = new SearchArguments();
-        $args->dialect('2');
-
-        $result = $this->adapter->searchIndex('session', $this->generateCondition($condition));
-        if ($result->count === 0) {
+        $total = $this->count($condition);
+        if ($total === 0) {
             return [];
         }
+
+        $args = new SearchArguments();
+        $args->dialect('2');
+        $args->limit(0, $total);
+
+        $result = $this->adapter->searchIndex('session', $this->generateCondition($condition), $args);
 
         return $result->result;
     }
 
     public function findReturnKey(array $condition): array
     {
+        $total = $this->count($condition);
+        if ($total === 0) {
+            return [];
+        }
+
         $args = new SearchArguments();
         $args->addReturn(1, 'id');
         $args->dialect('2');
+        $args->limit(0, $total);
 
         $data = $this->adapter->searchIndex('session', $this->generateCondition($condition), $args);
-        if ($data->count === 0) {
-            return [];
-        }
+
 
         return array_map(fn(object $result)  => $result->id, $data->result);
     }
@@ -106,11 +113,12 @@ class RedisAdapter implements AdapterInterface
     public function count(array $condition): int
     {
         $args = new SearchArguments();
+        $args->dialect('2');
         $args->noContent();
 
         $data = $this->adapter->searchIndex('session', $this->generateCondition($condition), $args);
 
-        return $data[0];
+        return $data->count;
     }
 
     public function findByOne(string $key, mixed $value): ?array

@@ -12,6 +12,8 @@ use Octamp\Wamp\Event\LeaveRealmEvent;
 use Octamp\Wamp\Promise\Deferred;
 use Octamp\Wamp\Promise\PromiseInterface;
 use Octamp\Wamp\Realm\Realm;
+use Octamp\Wamp\Registration\Model\Call;
+use Octamp\Wamp\Registration\Model\Invocation;
 use Octamp\Wamp\Session\Adapter\AdapterInterface;
 use Octamp\Wamp\Session\Event\MessageEvent;
 use Octamp\Wamp\Transport\AbstractTransport;
@@ -45,7 +47,9 @@ class Session
      */
     protected array $deferredList = [];
 
-    public function __construct(protected AbstractTransport $transport, protected string $serverId, protected AdapterInterface $adapter)
+    protected int $wampId = 0;
+
+    public function __construct(protected AbstractTransport $transport, protected string $serverId, protected AdapterInterface $sessionAdapter)
     {
         $connection = $this->transport->getConnection();
         if ($connection instanceof WithEventDispatcherInterface) {
@@ -297,7 +301,7 @@ class Session
 
     public function incrementWampId(): int|float
     {
-        return $this->adapter->incWampIdName($this, 'wampId');
+        return $this->wampId++;
     }
 
     public function addDeferred(Deferred $deferred): void

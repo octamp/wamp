@@ -15,8 +15,12 @@ use Octamp\Wamp\Connection\DummyConnection;
 use Octamp\Wamp\Helper\IDHelper;
 use Octamp\Wamp\Helper\SerializerHelper;
 use Octamp\Wamp\Matcher\Matcher;
+use Octamp\Wamp\Matcher\PrefixMatch;
+use Octamp\Wamp\Matcher\WildcardMatch;
 use Octamp\Wamp\Peers\Router;
 use Octamp\Wamp\Realm\RealmManager;
+use Octamp\Wamp\Registration\CallInvocationStorage;
+use Octamp\Wamp\Registration\RegistrationStorage;
 use Octamp\Wamp\Roles\Broker;
 use Octamp\Wamp\Roles\Dealer;
 use Octamp\Wamp\Serializer\DeserializationException;
@@ -73,16 +77,20 @@ class Wamp
         $transportProvider->getServer()->on('afterStart', function (Server $server) {
             $this->serverId = $server->getServerId();
             $sessionAdapter = new \Octamp\Wamp\Session\Adapter\RedisAdapter($this->adapter);
+            $matcher = new Matcher();
+            $matcher->addMatch(new PrefixMatch());
+            $matcher->addMatch(new WildcardMatch());
             IDHelper::setAdapter($this->adapter);
             IDHelper::setSessionAdapter($sessionAdapter);
             $sessionStorage = new SessionStorage($sessionAdapter, $server->getConnectionStorage(), $this->realmManager, $this->serverId);
-            $this->realmManager->init($sessionStorage, $this->adapter);
+            $registrationStorage = new RegistrationStorage($this->adapter, $sessionStorage, $matcher);
+            $callInvocationStorage = new CallInvocationStorage();
 
-            $matcher = new Matcher();
+            $this->realmManager->init($sessionStorage, $registrationStorage, $this->adapter);
 
             $router = new Router();
             $router->addRole(new Broker($this->adapter, $sessionStorage, $matcher, $this->serverId));
-            $router->addRole(new Dealer($this->adapter, $sessionStorage, $matcher, $this->serverId));
+            $router->addRole(new Dealer($this->adapter, $sessionStorage, $matcher, $registrationStorage, $callInvocationStorage, $this->serverId));
 
             $this->authManager->setRouter($router);
 
@@ -111,7 +119,7 @@ class Wamp
                 $realmFd -= 1;
             }
 
-            $this->adapter->subscribe('forward:message', function (string $serverId, string $transportId, string $data) use ($sessionStorage) {
+            $this->adapter->subscribe('forward:message', function (?string $forwarderServerId, string $serverId, string $transportId, string $data) use ($sessionStorage) {
                 if ($this->serverId === $serverId) {
                     $session = $sessionStorage->getSessionUsingTransportId($transportId);
                     $message = Message::createMessageFromArray(json_decode($data));

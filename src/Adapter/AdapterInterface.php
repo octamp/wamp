@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Octamp\Wamp\Adapter;
 
+use Predis\Command\Argument\Search\AggregateArguments;
 use Predis\Command\Argument\Search\AlterArguments;
 use Predis\Command\Argument\Search\CreateArguments;
 use Predis\Command\Argument\Search\SearchArguments;
@@ -14,7 +15,7 @@ interface AdapterInterface extends \Octamp\Server\Adapter\AdapterInterface
 
     public function subscribe(string $topic, callable $callback): void;
 
-    public function publish(string $topic, array $payload = [], ?string $serverId = null): void;
+    public function publish(string $topic, array $payload = [], ?string $serverId = null, ?string $fromServerId = null): void;
 
     public function set(string $key, array $data = []): void;
 
@@ -59,4 +60,8 @@ interface AdapterInterface extends \Octamp\Server\Adapter\AdapterInterface
     public function alterCreateIndex(string $index, array $schema, int $version, ?CreateArguments $arguments = null): void;
 
     public function searchIndex(string $index, array $queries = [], ?SearchArguments $arguments = null): object;
+
+    public function aggregate(string $index, array $queries = [], ?AggregateArguments $arguments = null): object;
+
+    public function count(string $index, array $queries = [], ?SearchArguments $arguments = null): int;
 }

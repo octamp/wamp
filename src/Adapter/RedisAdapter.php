@@ -8,6 +8,7 @@ use OpenSwoole\Coroutine;
 use OpenSwoole\Timer;
 use Octamp\Wamp\Pools\Pool;
 use Predis\Client;
+use Predis\Command\Argument\Search\AggregateArguments;
 use Predis\Command\Argument\Search\AlterArguments;
 use Predis\Command\Argument\Search\CommonArguments;
 use Predis\Command\Argument\Search\CreateArguments;
@@ -17,6 +18,7 @@ use Predis\Response\ServerException;
 class RedisAdapter extends \Octamp\Server\Adapter\RedisAdapter implements AdapterInterface
 {
     protected Pool $clients;
+    protected ?string $serverId = null;
 
     public function __construct(string $host, int $port, ?string $username = null, ?string $password = null, array $options = [])
     {
@@ -27,11 +29,17 @@ class RedisAdapter extends \Octamp\Server\Adapter\RedisAdapter implements Adapte
         });
     }
 
-    public function publish(string $topic, array $payload = [], ?string $serverId = null): void
+    public function start(string $serverId): void
+    {
+        $this->serverId = $serverId;
+        parent::start($serverId);
+    }
+
+    public function publish(string $topic, array $payload = [], ?string $serverId = null, ?string $fromServerId = null): void
     {
         $channel = ($serverId ?? 'global') . ':message';
         $client = $this->clients->pop();
-        $client->getResource()->publish($channel, json_encode([$topic, $payload]));
+        $client->getResource()->publish($channel, json_encode([$topic, $payload, $fromServerId ?? $this->serverId]));
         $this->clients->push($client);
     }
 
@@ -331,18 +339,35 @@ class RedisAdapter extends \Octamp\Server\Adapter\RedisAdapter implements Adapte
         });
     }
 
-    public function searchIndex(string $index, array $queries = [], ?SearchArguments $arguments = null): object
+    public function searchIndex(string $index, array $queries = [], SearchArguments $arguments = null): object
     {
         $data = $this->runCommand(function (Client $client) use ($index, $queries, $arguments) {
+            if (empty($queries)) {
+                $queries = ['*'];
+            }
             return $client->ftsearch($index, implode(' ', $queries), $arguments);
         });
 
         return $this->parseIndexSearchResult($data, $arguments);
     }
 
-    protected function parseIndexSearchResult(array $result, CommonArguments $arguments): object
+    public function aggregate(string $index, array $queries = [], ?AggregateArguments $arguments = null): object
     {
-        $withContent = !in_array('NOCONTENT', $arguments->toArray());
+        $data = $this->runCommand(function (Client $client) use ($index, $queries, $arguments) {
+            if (empty($queries)) {
+                $queries = ['*'];
+            }
+            return $client->ftaggregate($index, implode(' ', $queries), $arguments);
+        });
+
+        return $this->parseIndexSearchResult($data, $arguments, true);
+    }
+
+    protected function parseIndexSearchResult(array $result, CommonArguments $arguments, bool $aggregate = false): object
+    {
+        $args = $arguments->toArray();
+        $withContent = !in_array('NOCONTENT', $args);
+        $withScore = in_array('WITHSCORES', $args);
         $count = array_shift($result);
         if ($count === null) {
             $count = 0;
@@ -353,16 +378,22 @@ class RedisAdapter extends \Octamp\Server\Adapter\RedisAdapter implements Adapte
         }
 
         $newResult = [];
+        $scores = [];
 
         do {
-            $key = array_shift($result);
-            if (!$withContent) {
-                $newResult[] = $key;
-                continue;
+            $recordData = new \stdClass();
+            if (!$aggregate) {
+                $key = array_shift($result);
+                if ($withScore) {
+                    $scores[$key] = array_shift($result);
+                }
+                if (!$withContent) {
+                    $newResult[] = $key;
+                    continue;
+                }
+                $recordData->_key = $key;
             }
             $fieldData = array_shift($result);
-            $recordData = new \stdClass();
-            $recordData->_key = $key;
             do {
                 $field = array_shift($fieldData);
                 $fieldValue = array_shift($fieldData);
@@ -379,6 +410,21 @@ class RedisAdapter extends \Octamp\Server\Adapter\RedisAdapter implements Adapte
         return (object)[
             'count' => $count,
             'result' => $newResult,
+            'scores' => $scores,
         ];
+    }
+
+    public function count(string $index, array $queries = [], ?SearchArguments $arguments = null): int
+    {
+        if ($arguments === null) {
+            $arguments = new SearchArguments();
+        }
+        $arguments->limit(0, 0);
+        $arguments->dialect('2');
+        $arguments->noContent();
+
+        $data = $this->searchIndex($index, $queries, $arguments);
+
+        return $data->count;
     }
 }

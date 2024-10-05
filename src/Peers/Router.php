@@ -7,6 +7,7 @@ namespace Octamp\Wamp\Peers;
 use Octamp\Wamp\Event\EventInterface;
 use Octamp\Wamp\Roles\RoleInterface;
 use Octamp\Wamp\Session\Session;
+use Octamp\Wamp\Traits\MessageEventHandlerTrait;
 use Octamp\Wamp\Transport\TransportProviderInterface;
 use Thruway\Message\GoodbyeMessage;
 use Thruway\Message\Message;
@@ -14,6 +15,8 @@ use Thruway\Message\WelcomeMessage;
 
 class Router
 {
+    use MessageEventHandlerTrait;
+
     /**
      * @var RoleInterface[]
      */

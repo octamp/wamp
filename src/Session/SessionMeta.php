@@ -2,7 +2,9 @@
 
 namespace Octamp\Wamp\Session;
 
+use Octamp\Wamp\Adapter\AdapterInterface;
 use Octamp\Wamp\Helper\IDHelper;
+use Octamp\Wamp\Helper\UriHelper;
 use Octamp\Wamp\Meta\Error;
 use Octamp\Wamp\Meta\ErrorException;
 use Octamp\Wamp\Meta\Publication;
@@ -11,7 +13,9 @@ use Octamp\Wamp\Meta\Result;
 use Octamp\Wamp\Meta\Subscription;
 use Octamp\Wamp\Promise\Deferred;
 use Octamp\Wamp\Promise\PromiseInterface;
+use Octamp\Wamp\Registration\RegistrationStorage;
 use Octamp\Wamp\Session\Event\MessageEvent;
+use Predis\Command\Argument\Search\SearchArguments;
 use Thruway\Message\CallMessage;
 use Thruway\Message\ErrorMessage;
 use Thruway\Message\EventMessage;
@@ -38,8 +42,15 @@ class SessionMeta extends Session
      */
     private array $subscriptions = [];
 
-    public function init(): void
+    private ?AdapterInterface $adapter = null;
+
+    private ?RegistrationStorage $registrationStorage = null;
+
+    public function init(RegistrationStorage $registrationStorage, AdapterInterface $adapter): void
     {
+        $this->adapter = $adapter;
+        $this->registrationStorage = $registrationStorage;
+
         $this->addListener('Message:' . Message::MSG_INVOCATION, function (MessageEvent $event) {
             /** @var InvocationMessage $message */
             $message = $event->message;
@@ -85,6 +96,121 @@ class SessionMeta extends Session
 
             call_user_func($subscription->callback, $message->getArguments(), $message->getArgumentsKw(), $message->getDetails());
         });
+
+        $this->registerSessionMetaProcedure();
+        $this->registerRegistrationMetaProcedure();
+        $this->registerSubscriptionMetaProcedure();
+    }
+
+    protected function registerSessionMetaProcedure(): void
+    {
+
+    }
+
+    protected function registerRegistrationMetaProcedure(): void
+    {
+        $this->register('wamp.registration.list', function (Session $callerSession) {
+            $data = $this->registrationStorage->findRawRegistrations(
+                [['field' => 'realm', 'type' => 'tag', 'value' => $callerSession->getRealm()->getRealmName()]],
+                ['id', 'match'],
+                0
+            );
+            $lists = new \stdClass();
+            $lists->exact = [];
+            $lists->prefix = [];
+            $lists->wildcard = [];
+
+            foreach ($data->result as $item) {
+                $lists->{$item->match} = $item->id;
+            }
+
+            return $lists;
+        });
+
+        $this->register('wamp.registration.lookup', function (Session $callerSession, array $args = []) {
+            $uri = $args[0] ?? null;
+            $options = (object)($args[1] ?? []);
+            if ($uri === null) {
+                throw new ErrorException(new Error('wamp.error.invalid_uri'));
+            }
+
+            $registrations = $this->registrationStorage->searchRegistrations($uri, $callerSession->getRealm()->getRealmName(), $options->match ?? 'exact', false, 1);
+            if (!empty($registrations)) {
+                return $registrations[0]->getId();
+            } else {
+                return null;
+            }
+        });
+        $this->register('wamp.registration.match', function (Session $callerSession, array $args = []) {
+            $uri = $args[0] ?? null;
+            if ($uri === null || UriHelper::uriIsValidStrict($uri, true)) {
+                throw new ErrorException(new Error('wamp.error.invalid_uri'));
+            }
+
+            $procedure = $this->registrationStorage->getProcedure($uri, $callerSession->getRealm()->getRealmName());
+            if ($procedure === null) {
+                return null;
+            }
+
+            $registration = $this->registrationStorage->getRegistrationByProcedure($procedure);
+            if ($registration === null) {
+                return null;
+            } else {
+                return $registration->getId();
+            }
+        });
+        $this->register('wamp.registration.get', function (Session $callerSession, array $args = []) {
+            $id = $args[0] ?? null;
+            if ($id === null) {
+                throw new ErrorException(new Error('wamp.error.no_such_registration'));
+            }
+
+            $registration = $this->registrationStorage->getRegistrationById($callerSession->getRealm()->getRealmName(), $id);
+            if ($registration === null) {
+                throw new ErrorException(new Error('wamp.error.no_such_registration'));
+            } else {
+                return (object)[
+                    'id' => $registration->getId(),
+                    'created' => $registration->getRegisteredAt()->format(\DateTimeInterface::ATOM),
+                    'uri' => $registration->getProcedureName(),
+                    'match' => $registration->getMatch(),
+                    'invoke' => $registration->getInvokeType(),
+                ];
+            }
+        });
+
+        $this->register('wamp.registration.list_callees', function (Session $callerSession, array $args = []) {
+            $id = $args[0] ?? null;
+            if ($id === null) {
+                throw new ErrorException(new Error('wamp.error.no_such_registration'));
+            }
+
+            $registration = $this->registrationStorage->getRegistrationById($callerSession->getRealm()->getRealmName(), $id);
+            if ($registration === null) {
+                throw new ErrorException(new Error('wamp.error.no_such_registration'));
+            } else {
+                return [$registration->getSession()->getSessionId()];
+            }
+        });
+
+        $this->register('wamp.registration.count_callees', function (Session $callerSession, array $args = []) {
+            $id = $args[0] ?? null;
+            if ($id === null) {
+                throw new ErrorException(new Error('wamp.error.no_such_registration'));
+            }
+
+            $registration = $this->registrationStorage->getRegistrationById($callerSession->getRealm()->getRealmName(), $id);
+            if ($registration === null) {
+                throw new ErrorException(new Error('wamp.error.no_such_registration'));
+            } else {
+                return [1];
+            }
+        });
+    }
+
+    protected function registerSubscriptionMetaProcedure(): void
+    {
+
     }
 
     public function publish(string $topic, array $args = [], object $kwargs = new \stdClass(), object $options = new \stdClass()): PromiseInterface
